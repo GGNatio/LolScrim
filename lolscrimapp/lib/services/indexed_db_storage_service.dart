@@ -1,7 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'dart:html' as html;
-import 'dart:indexed_db';
+// IndexedDB non disponible dans ce contexte - utiliser alternative
+// import 'dart:indexed_db';
 import '../models/player.dart';
 import '../models/team.dart';
 import '../models/scrim.dart';
