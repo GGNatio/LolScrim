@@ -366,7 +366,7 @@ class _ImportMatchScreenState extends State<ImportMatchScreen> {
                   ),
                 ],
               ),
-            )).toList(),
+            )),
             
             const SizedBox(height: 16),
             

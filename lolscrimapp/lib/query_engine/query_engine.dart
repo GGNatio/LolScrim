@@ -91,13 +91,14 @@ class QueryEngine {
 
     for (final scrim in playerScrims) {
       for (final enemyChampion in scrim.enemyChampions) {
-        championWinrates.putIfAbsent(enemyChampion, () => {'wins': 0, 'total': 0});
-        championWinrates[enemyChampion]!['total'] = 
-            championWinrates[enemyChampion]!['total']! + 1;
+        final championId = enemyChampion.championId;
+        championWinrates.putIfAbsent(championId, () => {'wins': 0, 'total': 0});
+        championWinrates[championId]!['total'] = 
+            championWinrates[championId]!['total']! + 1;
         
-        if (scrim.isVictory) {
-          championWinrates[enemyChampion]!['wins'] = 
-              championWinrates[enemyChampion]!['wins']! + 1;
+        if (scrim.isVictory == true) {
+          championWinrates[championId]!['wins'] = 
+              championWinrates[championId]!['wins']! + 1;
         }
       }
     }

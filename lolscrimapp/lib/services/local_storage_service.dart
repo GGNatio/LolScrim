@@ -143,14 +143,14 @@ class LocalStorageService {
     await initialize();
     _players[player.id] = player;
     await _savePlayers();
-    print('✅ Joueur ajouté: ${player.name}');
+    print('✅ Joueur ajouté: ${player.id}');
   }
 
   static Future<void> updatePlayer(Player player) async {
     await initialize();
     _players[player.id] = player;
     await _savePlayers();
-    print('✅ Joueur mis à jour: ${player.name}');
+    print('✅ Joueur mis à jour: ${player.id}');
   }
 
   static Future<void> deletePlayer(String id) async {
@@ -158,7 +158,7 @@ class LocalStorageService {
     final player = _players.remove(id);
     if (player != null) {
       await _savePlayers();
-      print('✅ Joueur supprimé: ${player.name}');
+      print('✅ Joueur supprimé: ${player.id}');
     }
   }
 

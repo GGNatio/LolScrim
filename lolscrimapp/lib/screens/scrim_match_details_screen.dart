@@ -12,7 +12,6 @@ import '../models/game_data.dart';
 import '../services/players_provider.dart';
 import '../services/riot_api_service.dart';
 import '../services/scrims_provider.dart';
-import '../services/screenshot_analyzer.dart';
 import 'screenshot_preview_screen.dart';
 
 /// Données temporaires pour un joueur en cours de saisie

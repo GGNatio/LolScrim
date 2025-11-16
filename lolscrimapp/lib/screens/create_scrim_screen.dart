@@ -66,7 +66,7 @@ class _CreateScrimScreenState extends State<CreateScrimScreen> {
               Consumer<TeamsProvider>(
                 builder: (context, teamsProvider, child) {
                   return DropdownButtonFormField<Team>(
-                    value: _selectedTeam,
+                    initialValue: _selectedTeam,
                     decoration: const InputDecoration(
                       labelText: 'Équipe qui joue *',
                       border: OutlineInputBorder(),

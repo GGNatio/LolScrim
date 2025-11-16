@@ -178,7 +178,7 @@ class _CreatePlayerModalState extends State<CreatePlayerModal> {
                         
                         // Jeu
                         DropdownButtonFormField<Game>(
-                          value: _selectedGame,
+                          initialValue: _selectedGame,
                           decoration: const InputDecoration(
                             labelText: 'Jeu *',
                             border: OutlineInputBorder(),
@@ -212,7 +212,7 @@ class _CreatePlayerModalState extends State<CreatePlayerModal> {
                         
                         // Rôle (adaptatif selon le jeu)
                         DropdownButtonFormField<String>(
-                          value: _selectedRole,
+                          initialValue: _selectedRole,
                           decoration: const InputDecoration(
                             labelText: 'Rôle *',
                             border: OutlineInputBorder(),
@@ -233,7 +233,7 @@ class _CreatePlayerModalState extends State<CreatePlayerModal> {
                         
                         // Rang (adaptatif selon le jeu)
                         DropdownButtonFormField<String>(
-                          value: _selectedRank,
+                          initialValue: _selectedRank,
                           decoration: const InputDecoration(
                             labelText: 'Rang',
                             border: OutlineInputBorder(),

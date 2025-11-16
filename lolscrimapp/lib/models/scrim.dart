@@ -489,6 +489,8 @@ class Scrim {
     DateTime? playedAt,
     String? patch,
     String? notes,
+    // Propriétés de compatibilité (ignorées)
+    List<TeamPlayer>? myTeamStats,
   }) {
     return Scrim(
       id: id ?? this.id,
@@ -556,6 +558,27 @@ class Scrim {
     return matches.any((match) =>
       match.enemyPlayers.any((player) => player.championId == championId)
     );
+  }
+
+  /// Propriété de compatibilité pour l'ancien code
+  List<TeamPlayer> get myTeamStats {
+    return matches.expand((match) => match.myTeamPlayers).toList();
+  }
+
+  /// Propriété de compatibilité pour l'ancien code
+  List<EnemyPlayer> get enemyChampions {
+    return matches.expand((match) => match.enemyPlayers).toList();
+  }
+
+  /// Méthode de compatibilité pour récupérer les stats d'un joueur
+  TeamPlayer? getPlayerStats(String playerId) {
+    for (final match in matches) {
+      final player = match.myTeamPlayers
+          .where((p) => p.playerId == playerId)
+          .firstOrNull;
+      if (player != null) return player;
+    }
+    return null;
   }
 
   /// Retourne un résumé du scrim
