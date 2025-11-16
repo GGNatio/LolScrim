@@ -172,7 +172,7 @@ class _ScreenshotPreviewScreenState extends State<ScreenshotPreviewScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        ...players.map((player) => _buildPlayerCard(player)).toList(),
+        ...players.map((player) => _buildPlayerCard(player)),
       ],
     );
   }

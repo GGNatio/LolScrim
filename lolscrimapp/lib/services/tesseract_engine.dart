@@ -56,7 +56,9 @@ class TesseractEngine {
           .toList();
       
       print('✅ Texte extrait: ${lines.length} lignes');
-      lines.forEach((line) => print('  📄 "$line"'));
+      for (var line in lines) {
+        print('  📄 "$line"');
+      }
       
       return lines;
       

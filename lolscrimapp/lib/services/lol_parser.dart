@@ -16,7 +16,7 @@ class LoLParser {
     // Lettres communes
     '0': 'O', '1': 'l', '5': 'S', '6': 'G', '8': 'B',
     // Caractères spéciaux
-    '|': 'I', '/': '/', '\\': '/', '\"': '', '\'': '',
+    '|': 'I', '/': '/', '\\': '/', '"': '', '\'': '',
   };
   
   /// 🚀 PARSING PRINCIPAL TEXTE OCR
@@ -34,7 +34,9 @@ class LoLParser {
         .toList();
     
     print('📝 Lignes nettoyées: ${cleanedLines.length}');
-    cleanedLines.forEach((line) => print('  🔍 "$line"'));
+    for (var line in cleanedLines) {
+      print('  🔍 "$line"');
+    }
     
     // Extraire joueurs
     final extractedPlayers = _extractPlayers(cleanedLines);
