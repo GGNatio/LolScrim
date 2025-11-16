@@ -362,6 +362,7 @@ _team = teamsProvider.teams.where(
                 itemBuilder: (context, index) {
                   final match = _currentScrim.matches[index];
                   return ListTile(
+                    onTap: () => _viewMatchDetails(match),
                     leading: CircleAvatar(
                       backgroundColor: (match.isVictory ?? false) ? Colors.green.shade100 : Colors.red.shade100,
                       child: Icon(
@@ -373,12 +374,22 @@ _team = teamsProvider.teams.where(
                     subtitle: Text(
                       (match.isVictory ?? false) ? 'Victoire' : 'Défaite',
                     ),
-                    trailing: match.matchDuration != null
-                        ? Text(
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (match.matchDuration != null)
+                          Text(
                             '${match.matchDuration!.inMinutes}min',
                             style: TextStyle(color: Colors.grey.shade600),
-                          )
-                        : null,
+                          ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.visibility,
+                          color: Colors.grey.shade600,
+                          size: 20,
+                        ),
+                      ],
+                    ),
                   );
                 },
               ),
@@ -510,6 +521,21 @@ _team = teamsProvider.teams.where(
             child: const Text('Supprimer'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _viewMatchDetails(ScrimMatch match) {
+    if (_team == null) return; // Sécurité si l'équipe n'est pas chargée
+    
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ScrimMatchDetailsScreen(
+          scrim: _currentScrim,
+          team: _team!,
+          initialMatchIndex: match.matchNumber - 1, // Convertir en index 0-based
+          readOnly: true, // Mode lecture seule
+        ),
       ),
     );
   }

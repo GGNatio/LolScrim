@@ -10,6 +10,24 @@ class ScrimMatch {
   final bool? isVictory;
   final Duration? matchDuration;
   final String? notes;
+  
+  // Bannissements
+  final List<String?> myTeamBans;
+  final List<String?> enemyTeamBans;
+  
+  // Objectifs
+  final int? myTeamTurrets;
+  final int? enemyTeamTurrets;
+  final int? myTeamDragons;
+  final int? enemyTeamDragons;
+  final int? myTeamBarons;
+  final int? enemyTeamBarons;
+  final int? myTeamHeralds;
+  final int? enemyTeamHeralds;
+  final int? myTeamGroms;
+  final int? enemyTeamGroms;
+  final bool? myTeamNexusTurrets;
+  final bool? enemyTeamNexusTurrets;
 
   const ScrimMatch({
     required this.matchNumber,
@@ -20,6 +38,20 @@ class ScrimMatch {
     this.isVictory,
     this.matchDuration,
     this.notes,
+    this.myTeamBans = const [null, null, null, null, null],
+    this.enemyTeamBans = const [null, null, null, null, null],
+    this.myTeamTurrets,
+    this.enemyTeamTurrets,
+    this.myTeamDragons,
+    this.enemyTeamDragons,
+    this.myTeamBarons,
+    this.enemyTeamBarons,
+    this.myTeamHeralds,
+    this.enemyTeamHeralds,
+    this.myTeamGroms,
+    this.enemyTeamGroms,
+    this.myTeamNexusTurrets,
+    this.enemyTeamNexusTurrets,
   });
 
   /// Vérifie si le match est complet (5 joueurs de chaque côté)
@@ -61,6 +93,20 @@ class ScrimMatch {
           ? Duration(seconds: map['match_duration'] as int)
           : null,
       notes: map['notes'] as String?,
+      myTeamBans: (map['my_team_bans'] as List?)?.cast<String?>() ?? [null, null, null, null, null],
+      enemyTeamBans: (map['enemy_team_bans'] as List?)?.cast<String?>() ?? [null, null, null, null, null],
+      myTeamTurrets: map['my_team_turrets'] as int?,
+      enemyTeamTurrets: map['enemy_team_turrets'] as int?,
+      myTeamDragons: map['my_team_dragons'] as int?,
+      enemyTeamDragons: map['enemy_team_dragons'] as int?,
+      myTeamBarons: map['my_team_barons'] as int?,
+      enemyTeamBarons: map['enemy_team_barons'] as int?,
+      myTeamHeralds: map['my_team_heralds'] as int?,
+      enemyTeamHeralds: map['enemy_team_heralds'] as int?,
+      myTeamGroms: map['my_team_groms'] as int?,
+      enemyTeamGroms: map['enemy_team_groms'] as int?,
+      myTeamNexusTurrets: map['my_team_nexus_turrets'] as bool?,
+      enemyTeamNexusTurrets: map['enemy_team_nexus_turrets'] as bool?,
     );
   }
 
@@ -74,6 +120,20 @@ class ScrimMatch {
       'is_victory': isVictory,
       'match_duration': matchDuration?.inSeconds,
       'notes': notes,
+      'my_team_bans': myTeamBans,
+      'enemy_team_bans': enemyTeamBans,
+      'my_team_turrets': myTeamTurrets,
+      'enemy_team_turrets': enemyTeamTurrets,
+      'my_team_dragons': myTeamDragons,
+      'enemy_team_dragons': enemyTeamDragons,
+      'my_team_barons': myTeamBarons,
+      'enemy_team_barons': enemyTeamBarons,
+      'my_team_heralds': myTeamHeralds,
+      'enemy_team_heralds': enemyTeamHeralds,
+      'my_team_groms': myTeamGroms,
+      'enemy_team_groms': enemyTeamGroms,
+      'my_team_nexus_turrets': myTeamNexusTurrets,
+      'enemy_team_nexus_turrets': enemyTeamNexusTurrets,
     };
   }
 
@@ -86,6 +146,20 @@ class ScrimMatch {
     bool? isVictory,
     Duration? matchDuration,
     String? notes,
+    List<String?>? myTeamBans,
+    List<String?>? enemyTeamBans,
+    int? myTeamTurrets,
+    int? enemyTeamTurrets,
+    int? myTeamDragons,
+    int? enemyTeamDragons,
+    int? myTeamBarons,
+    int? enemyTeamBarons,
+    int? myTeamHeralds,
+    int? enemyTeamHeralds,
+    int? myTeamGroms,
+    int? enemyTeamGroms,
+    bool? myTeamNexusTurrets,
+    bool? enemyTeamNexusTurrets,
   }) {
     return ScrimMatch(
       matchNumber: matchNumber ?? this.matchNumber,
@@ -96,6 +170,20 @@ class ScrimMatch {
       isVictory: isVictory ?? this.isVictory,
       matchDuration: matchDuration ?? this.matchDuration,
       notes: notes ?? this.notes,
+      myTeamBans: myTeamBans ?? this.myTeamBans,
+      enemyTeamBans: enemyTeamBans ?? this.enemyTeamBans,
+      myTeamTurrets: myTeamTurrets ?? this.myTeamTurrets,
+      enemyTeamTurrets: enemyTeamTurrets ?? this.enemyTeamTurrets,
+      myTeamDragons: myTeamDragons ?? this.myTeamDragons,
+      enemyTeamDragons: enemyTeamDragons ?? this.enemyTeamDragons,
+      myTeamBarons: myTeamBarons ?? this.myTeamBarons,
+      enemyTeamBarons: enemyTeamBarons ?? this.enemyTeamBarons,
+      myTeamHeralds: myTeamHeralds ?? this.myTeamHeralds,
+      enemyTeamHeralds: enemyTeamHeralds ?? this.enemyTeamHeralds,
+      myTeamGroms: myTeamGroms ?? this.myTeamGroms,
+      enemyTeamGroms: enemyTeamGroms ?? this.enemyTeamGroms,
+      myTeamNexusTurrets: myTeamNexusTurrets ?? this.myTeamNexusTurrets,
+      enemyTeamNexusTurrets: enemyTeamNexusTurrets ?? this.enemyTeamNexusTurrets,
     );
   }
 }
@@ -490,5 +578,5 @@ class Scrim {
   int get hashCode => id.hashCode;
 
   @override
-  String toString() => 'Scrim(name: $name, ${scrimSummary})';
+  String toString() => 'Scrim(name: $name, $scrimSummary)';
 }

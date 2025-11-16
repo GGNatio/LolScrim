@@ -511,6 +511,41 @@ class _CreateScrimScreenState extends State<CreateScrimScreen> {
     );
   }
 
+  /// Crée une liste de 5 joueurs d'équipe vides avec des rôles par défaut
+  List<TeamPlayer> _createEmptyTeamPlayers() {
+    final defaultRoles = ['Top', 'Jungle', 'Mid', 'ADC', 'Support'];
+    
+    return List.generate(5, (index) => TeamPlayer(
+      playerId: null, // Pas de joueur assigné initially
+      pseudo: 'Joueur ${index + 1}',
+      role: defaultRoles[index],
+      championId: '', // Pas de champion sélectionné
+      kills: null,
+      deaths: null,
+      assists: null,
+      cs: null,
+      gold: null,
+      damage: null,
+    ));
+  }
+  
+  /// Crée une liste de 5 joueurs ennemis vides avec des rôles par défaut  
+  List<EnemyPlayer> _createEmptyEnemyPlayers() {
+    final defaultRoles = ['Top', 'Jungle', 'Mid', 'ADC', 'Support'];
+    
+    return List.generate(5, (index) => EnemyPlayer(
+      pseudo: 'Ennemi ${index + 1}',
+      role: defaultRoles[index],
+      championId: '', // Pas de champion sélectionné
+      kills: null,
+      deaths: null,
+      assists: null,
+      cs: null,
+      gold: null,
+      damage: null,
+    ));
+  }
+
   Future<void> _createScrim() async {
     if (!_formKey.currentState!.validate()) return;
     
@@ -519,14 +554,32 @@ class _CreateScrimScreenState extends State<CreateScrimScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Créer le scrim de base
+      // Générer l'ID du scrim
+      final scrimId = const Uuid().v4();
+      
+      // Créer automatiquement tous les matchs vides selon le nombre configuré
+      final List<ScrimMatch> emptyMatches = [];
+      for (int i = 1; i <= _totalMatches; i++) {
+        emptyMatches.add(ScrimMatch(
+          matchNumber: i,
+          myTeamPlayers: _createEmptyTeamPlayers(),
+          enemyPlayers: _createEmptyEnemyPlayers(),
+          myTeamScore: null,
+          enemyTeamScore: null,
+          isVictory: null,
+          matchDuration: const Duration(minutes: 30),
+          notes: 'Match $i - Vide',
+        ));
+      }
+      
+      // Créer le scrim avec tous les matchs pré-générés
       final scrim = Scrim(
-        id: const Uuid().v4(),
+        id: scrimId,
         name: _nameController.text.trim(),
         myTeamId: _selectedTeam?.id ?? widget.team.id,
         enemyTeamName: _enemyTeamController.text.trim(),
         totalMatches: _totalMatches,
-        matches: const [],
+        matches: emptyMatches, // ✅ Maintenant pré-rempli avec tous les matchs vides
         myTeamWins: _myTeamWins,
         enemyTeamWins: _enemyTeamWins,
         createdAt: DateTime.now(),

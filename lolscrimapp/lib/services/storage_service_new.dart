@@ -133,7 +133,7 @@ class JsonStorageService {
         final player = Player.fromMap(playerMap);
         _players[player.id] = player;
       }
-      print('📂 ${_players.length} joueurs chargés depuis ${_playersFile}');
+      print('📂 ${_players.length} joueurs chargés depuis $_playersFile');
     } catch (e) {
       print('❌ Erreur chargement joueurs: $e');
     }
@@ -190,7 +190,7 @@ class JsonStorageService {
         final team = Team.fromMap(teamMap);
         _teams[team.id] = team;
       }
-      print('📂 ${_teams.length} équipes chargées depuis ${_teamsFile}');
+      print('📂 ${_teams.length} équipes chargées depuis $_teamsFile');
     } catch (e) {
       print('❌ Erreur chargement équipes: $e');
     }
@@ -247,7 +247,7 @@ class JsonStorageService {
         final scrim = Scrim.fromMap(scrimMap);
         _scrims[scrim.id] = scrim;
       }
-      print('📂 ${_scrims.length} scrims chargés depuis ${_scrimsFile}');
+      print('📂 ${_scrims.length} scrims chargés depuis $_scrimsFile');
     } catch (e) {
       print('❌ Erreur chargement scrims: $e');
     }
@@ -318,7 +318,7 @@ class JsonStorageService {
       }
       
       final totalStats = _playerStats.values.fold(0, (sum, stats) => sum + stats.length);
-      print('📂 $totalStats stats joueurs chargées depuis ${_playerStatsFile}');
+      print('📂 $totalStats stats joueurs chargées depuis $_playerStatsFile');
     } catch (e) {
       print('❌ Erreur chargement stats: $e');
     }
@@ -389,7 +389,7 @@ class JsonStorageService {
         final file = File(path.join(_appDirectory!, fileName));
         if (await file.exists()) {
           final size = await file.length();
-          print('📄 $fileName: ${size} octets');
+          print('📄 $fileName: $size octets');
         } else {
           print('❌ $fileName: fichier manquant');
         }

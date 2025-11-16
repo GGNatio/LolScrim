@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import '../models/team.dart';
 import '../models/scrim.dart';
 import '../models/champion.dart';
@@ -8,6 +11,9 @@ import '../models/player.dart';
 import '../models/game_data.dart';
 import '../services/players_provider.dart';
 import '../services/riot_api_service.dart';
+import '../services/scrims_provider.dart';
+import '../services/screenshot_analyzer.dart';
+import 'screenshot_preview_screen.dart';
 
 /// Données temporaires pour un joueur en cours de saisie
 class MatchPlayerData {
@@ -42,11 +48,15 @@ class MatchPlayerData {
 class ScrimMatchDetailsScreen extends StatefulWidget {
   final Scrim scrim;
   final Team team;
+  final int initialMatchIndex;
+  final bool readOnly;
 
   const ScrimMatchDetailsScreen({
     super.key,
     required this.scrim,
     required this.team,
+    this.initialMatchIndex = 0,
+    this.readOnly = false,
   });
 
   @override
@@ -57,6 +67,7 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
   late PageController _pageController;
   late Scrim _currentScrim;
   int _currentMatchIndex = 0;
+  late String _currentMatchId; // ID unique pour le match en cours
   
   // Données du match en cours
   List<MatchPlayerData> myTeamData = List.generate(5, (_) => MatchPlayerData());
@@ -96,12 +107,47 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
   
   List<Player> availablePlayers = [];
   List<Champion> availableChampions = [];
+  
+  // TextEditingControllers pour les KDA de chaque joueur
+  final List<List<TextEditingController>> myTeamControllers = [];
+  final List<List<TextEditingController>> enemyTeamControllers = [];
+  
+  // TextEditingControllers pour les objectifs
+  final Map<String, TextEditingController> objectiveControllers = {};
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
     _currentScrim = widget.scrim;
+    _currentMatchIndex = widget.initialMatchIndex;
+    _currentMatchId = _generateMatchId(_currentMatchIndex + 1);
+    
+    // Initialiser les controllers pour chaque joueur (5 stats chacun: K/D/A/CS/Gold)
+    for (int i = 0; i < 5; i++) {
+      myTeamControllers.add([
+        TextEditingController(), // kills
+        TextEditingController(), // deaths  
+        TextEditingController(), // assists
+        TextEditingController(), // cs
+        TextEditingController(), // gold
+      ]);
+      enemyTeamControllers.add([
+        TextEditingController(), // kills
+        TextEditingController(), // deaths
+        TextEditingController(), // assists  
+        TextEditingController(), // cs
+        TextEditingController(), // gold
+      ]);
+    }
+    
+    // Initialiser les controllers des objectifs
+    final objectives = ['Tours', 'Dragons', 'Baron', 'Herald', 'Grubs', 'Nexus'];
+    for (final obj in objectives) {
+      objectiveControllers['my_$obj'] = TextEditingController();
+      objectiveControllers['enemy_$obj'] = TextEditingController();
+    }
+    
     _loadGameData();
     _loadExistingMatchData();
   }
@@ -109,6 +155,22 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
   @override
   void dispose() {
     _pageController.dispose();
+    
+    // Nettoyer tous les controllers
+    for (final playerControllers in myTeamControllers) {
+      for (final controller in playerControllers) {
+        controller.dispose();
+      }
+    }
+    for (final playerControllers in enemyTeamControllers) {
+      for (final controller in playerControllers) {
+        controller.dispose();
+      }
+    }
+    for (final controller in objectiveControllers.values) {
+      controller.dispose();
+    }
+    
     super.dispose();
   }
   
@@ -118,13 +180,190 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
     availableChampions = Champions.all;
   }
   
+  /// Génère un ID unique pour un match basé sur le scrim ID et le numéro de match
+  String _generateMatchId(int matchNumber) {
+    return '${widget.scrim.id}_match_$matchNumber';
+  }
+  
+  /// Initialise un match avec des données vides
+  void _initializeEmptyMatch() {
+    print('🆕 Initialisation d\'un match vide');
+    setState(() {
+      // Reset complet des données joueurs
+      myTeamData = List.generate(5, (_) => MatchPlayerData());
+      enemyTeamData = List.generate(5, (_) => MatchPlayerData());
+      
+      // Reset des autres données
+      isVictory = null;
+      matchDuration = const Duration(minutes: 30);
+      
+      // Reset des objectifs
+      myTeamTurrets = 0;
+      enemyTeamTurrets = 0;
+      myTeamDragons = 0;
+      enemyTeamDragons = 0;
+      myTeamBarons = 0;
+      enemyTeamBarons = 0;
+      myTeamHeralds = 0;
+      enemyTeamHeralds = 0;
+      myTeamGroms = 0;
+      enemyTeamGroms = 0;
+      myTeamNexusTurrets = false;
+      enemyTeamNexusTurrets = false;
+      
+      // Reset des bans
+      myTeamBans = List.filled(5, null);
+      enemyTeamBans = List.filled(5, null);
+      
+      _calculateTeamStats();
+    });
+  }
+  
   void _loadExistingMatchData() {
     final matchNumber = _currentMatchIndex + 1;
-    final existingMatch = _currentScrim.getMatch(matchNumber);
-    if (existingMatch != null) {
-      matchDuration = existingMatch.matchDuration ?? const Duration(minutes: 30);
-      isVictory = existingMatch.isVictory;
+    print('🔍 DEBUT: Chargement du match $matchNumber (index: $_currentMatchIndex)');
+    print('📊 Scrim contient ${_currentScrim.matches.length} matchs');
+    
+    // Debug: lister tous les matchs
+    for (int i = 0; i < _currentScrim.matches.length; i++) {
+      final match = _currentScrim.matches[i];
+      final firstPlayerKills = match.myTeamPlayers.isNotEmpty ? match.myTeamPlayers[0].kills : null;
+      print('   Match ${match.matchNumber}: $firstPlayerKills kills');
     }
+    
+    final existingMatch = _currentScrim.getMatch(matchNumber);
+    
+    if (existingMatch != null) {
+      final firstPlayerKills = existingMatch.myTeamPlayers.isNotEmpty ? existingMatch.myTeamPlayers[0].kills : null;
+      print('📥 TROUVE: Match $matchNumber dans le JSON');
+      print('💡 Premier joueur du match: $firstPlayerKills kills');
+      
+      setState(() {
+        // RESET COMPLET avant de charger
+        myTeamData = List.generate(5, (_) => MatchPlayerData());
+        enemyTeamData = List.generate(5, (_) => MatchPlayerData());
+        
+        // Charger les données de base
+        matchDuration = existingMatch.matchDuration ?? const Duration(minutes: 30);
+        isVictory = existingMatch.isVictory;
+        
+        // Charger joueurs alliés
+        for (int i = 0; i < 5; i++) {
+          if (i < existingMatch.myTeamPlayers.length) {
+            final player = existingMatch.myTeamPlayers[i];
+            myTeamData[i].playerId = player.playerId;
+            myTeamData[i].champion = player.championId.isNotEmpty ? Champions.getById(player.championId) : null;
+            myTeamData[i].kills = player.kills;
+            myTeamData[i].deaths = player.deaths;
+            myTeamData[i].assists = player.assists;
+            myTeamData[i].cs = player.cs;
+            myTeamData[i].gold = player.gold;
+            myTeamData[i].damage = player.damage;
+            if (player.playerId == null) {
+              myTeamData[i].pseudoName = player.pseudo;
+            }
+            print('   👤 Joueur ${i+1}: ${player.kills} kills chargés');
+          }
+        }
+        
+        // Charger joueurs ennemis
+        for (int i = 0; i < 5; i++) {
+          if (i < existingMatch.enemyPlayers.length) {
+            final player = existingMatch.enemyPlayers[i];
+            enemyTeamData[i].champion = player.championId.isNotEmpty ? Champions.getById(player.championId) : null;
+            enemyTeamData[i].kills = player.kills;
+            enemyTeamData[i].deaths = player.deaths;
+            enemyTeamData[i].assists = player.assists;
+            enemyTeamData[i].cs = player.cs;
+            enemyTeamData[i].gold = player.gold;
+            enemyTeamData[i].damage = player.damage;
+            enemyTeamData[i].pseudoName = player.pseudo;
+          }
+        }
+        
+        // Charger objectifs et bannissements depuis le JSON
+        myTeamTurrets = existingMatch.myTeamTurrets ?? 0;
+        enemyTeamTurrets = existingMatch.enemyTeamTurrets ?? 0;
+        myTeamDragons = existingMatch.myTeamDragons ?? 0;
+        enemyTeamDragons = existingMatch.enemyTeamDragons ?? 0;
+        myTeamBarons = existingMatch.myTeamBarons ?? 0;
+        enemyTeamBarons = existingMatch.enemyTeamBarons ?? 0;
+        myTeamHeralds = existingMatch.myTeamHeralds ?? 0;
+        enemyTeamHeralds = existingMatch.enemyTeamHeralds ?? 0;
+        myTeamGroms = existingMatch.myTeamGroms ?? 0;
+        enemyTeamGroms = existingMatch.enemyTeamGroms ?? 0;
+        myTeamNexusTurrets = existingMatch.myTeamNexusTurrets ?? false;
+        enemyTeamNexusTurrets = existingMatch.enemyTeamNexusTurrets ?? false;
+        
+        // Charger bannissements
+        myTeamBans = existingMatch.myTeamBans.map((banId) => 
+          banId != null ? Champions.getById(banId) : null
+        ).toList();
+        enemyTeamBans = existingMatch.enemyTeamBans.map((banId) => 
+          banId != null ? Champions.getById(banId) : null
+        ).toList();
+      });
+      
+      // Calculer les stats APRÈS le setState
+      _calculateTeamStats();
+      
+      // FORCE un rebuild complet de l'interface après chargement
+      Future.delayed(const Duration(milliseconds: 50), () {
+        if (mounted) {
+          setState(() {
+            // Rebuild forcé pour mettre à jour tous les TextFields
+          });
+        }
+      });
+      
+      // Mettre à jour TOUS les controllers avec les nouvelles données
+      _updateAllControllers();
+      
+      print('✅ FIN: Match $matchNumber chargé');
+    } else {
+      print('⚠️ ABSENT: Match $matchNumber introuvable - initialisation vide');
+      _initializeEmptyMatch();
+    }
+  }
+  
+  void _updateAllControllers() {
+    // Mettre à jour les controllers des joueurs alliés
+    for (int i = 0; i < 5; i++) {
+      if (i < myTeamData.length) {
+        final player = myTeamData[i];
+        myTeamControllers[i][0].text = player.kills?.toString() ?? '';
+        myTeamControllers[i][1].text = player.deaths?.toString() ?? '';
+        myTeamControllers[i][2].text = player.assists?.toString() ?? '';
+        myTeamControllers[i][3].text = player.cs?.toString() ?? '';
+        myTeamControllers[i][4].text = player.gold?.toString() ?? '';
+      }
+    }
+    
+    // Mettre à jour les controllers des joueurs ennemis
+    for (int i = 0; i < 5; i++) {
+      if (i < enemyTeamData.length) {
+        final player = enemyTeamData[i];
+        enemyTeamControllers[i][0].text = player.kills?.toString() ?? '';
+        enemyTeamControllers[i][1].text = player.deaths?.toString() ?? '';
+        enemyTeamControllers[i][2].text = player.assists?.toString() ?? '';
+        enemyTeamControllers[i][3].text = player.cs?.toString() ?? '';
+        enemyTeamControllers[i][4].text = player.gold?.toString() ?? '';
+      }
+    }
+    
+    // Mettre à jour les controllers des objectifs
+    objectiveControllers['my_Tours']?.text = myTeamTurrets.toString();
+    objectiveControllers['enemy_Tours']?.text = enemyTeamTurrets.toString();
+    objectiveControllers['my_Dragons']?.text = myTeamDragons.toString();
+    objectiveControllers['enemy_Dragons']?.text = enemyTeamDragons.toString();
+    objectiveControllers['my_Baron']?.text = myTeamBarons.toString();
+    objectiveControllers['enemy_Baron']?.text = enemyTeamBarons.toString();
+    objectiveControllers['my_Herald']?.text = myTeamHeralds.toString();
+    objectiveControllers['enemy_Herald']?.text = enemyTeamHeralds.toString();
+    objectiveControllers['my_Grubs']?.text = myTeamGroms.toString();
+    objectiveControllers['enemy_Grubs']?.text = enemyTeamGroms.toString();
+    objectiveControllers['my_Nexus']?.text = (myTeamNexusTurrets ? 1 : 0).toString();
+    objectiveControllers['enemy_Nexus']?.text = (enemyTeamNexusTurrets ? 1 : 0).toString();
   }
   
   void _calculateTeamStats() {
@@ -151,7 +390,7 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Match ${_currentMatchIndex + 1}'),
+              Text('Match ${_currentMatchIndex + 1}${widget.readOnly ? ' (Lecture seule)' : ''}'),
               Text(
                 '${widget.team.name} vs ${_currentScrim.enemyTeamName}',
                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.normal),
@@ -164,6 +403,29 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
           shadowColor: Colors.transparent,
           surfaceTintColor: Colors.transparent,
           scrolledUnderElevation: 0,
+          actions: widget.readOnly ? [
+            TextButton.icon(
+              onPressed: () {
+                // Passer en mode édition
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (context) => ScrimMatchDetailsScreen(
+                      scrim: widget.scrim,
+                      team: widget.team,
+                      initialMatchIndex: _currentMatchIndex,
+                      readOnly: false,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.edit, color: Colors.white, size: 16),
+              label: const Text('Modifier', style: TextStyle(color: Colors.white)),
+              style: TextButton.styleFrom(
+                backgroundColor: const Color(0xFFC89B3C),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ] : null,
           bottom: const PreferredSize(
             preferredSize: Size.zero,
             child: SizedBox.shrink(),
@@ -180,8 +442,14 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
               controller: _pageController,
               itemCount: _currentScrim.totalMatches,
               onPageChanged: (index) {
+                print('📄 Changement de page vers match ${index + 1}');
                 setState(() {
                   _currentMatchIndex = index;
+                  _currentMatchId = _generateMatchId(index + 1);
+                });
+                
+                // Charger les données du nouveau match après le changement de page
+                Future.delayed(const Duration(milliseconds: 100), () {
                   _loadExistingMatchData();
                 });
               },
@@ -219,40 +487,84 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
             const SizedBox(width: 16),
             
             // Bouton d'import automatique
-            ElevatedButton.icon(
-              onPressed: _importMatchFromRiot,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
-              icon: const Icon(Icons.cloud_download, size: 18),
-              label: const Text('Import', style: TextStyle(fontSize: 13)),
-            ),
-            
-            const SizedBox(width: 8),
-            
-            // Boutons de navigation
-            if (_currentMatchIndex > 0)
-              ElevatedButton(
-                onPressed: _previousMatch,
+            // Boutons selon le mode
+            if (!widget.readOnly) ...[
+              ElevatedButton.icon(
+                onPressed: _importMatchFromRiot,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF463714),
-                  foregroundColor: const Color(0xFFCDBC8A),
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
-                child: const Text('Précédent'),
+                icon: const Icon(Icons.cloud_download, size: 18),
+                label: const Text('Import', style: TextStyle(fontSize: 13)),
               ),
-            
-            if (_currentMatchIndex > 0) const SizedBox(width: 8),
-            
-            ElevatedButton(
-              onPressed: _currentMatchIndex < _currentScrim.totalMatches - 1 ? _nextMatch : _finishScrim,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF3C89E8),
-                foregroundColor: Colors.white,
+              
+              const SizedBox(width: 8),
+              
+              ElevatedButton.icon(
+                onPressed: _importFromScreenshot,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.purple,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                icon: const Icon(Icons.photo_camera, size: 18),
+                label: const Text('Screenshot', style: TextStyle(fontSize: 13)),
               ),
-              child: Text(_currentMatchIndex < _currentScrim.totalMatches - 1 ? 'Suivant' : 'Terminer'),
-            ),
+              
+              const SizedBox(width: 8),
+              
+              // Boutons de navigation en mode édition
+              if (_currentMatchIndex > 0)
+                ElevatedButton(
+                  onPressed: _previousMatch,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF463714),
+                    foregroundColor: const Color(0xFFCDBC8A),
+                  ),
+                  child: const Text('Précédent'),
+                ),
+              
+              if (_currentMatchIndex > 0) const SizedBox(width: 8),
+              
+              ElevatedButton(
+                onPressed: _currentMatchIndex < _currentScrim.totalMatches - 1 ? _nextMatch : _finishScrim,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF3C89E8),
+                  foregroundColor: Colors.white,
+                ),
+                child: Text(_currentMatchIndex < _currentScrim.totalMatches - 1 ? 'Suivant' : 'Terminer'),
+              ),
+            ] else ...[
+              // Navigation simple en mode lecture seule
+              if (_currentMatchIndex > 0)
+                IconButton(
+                  onPressed: () => _navigateToMatch(_currentMatchIndex - 1),
+                  style: IconButton.styleFrom(
+                    backgroundColor: const Color(0xFF463714),
+                    foregroundColor: const Color(0xFFCDBC8A),
+                  ),
+                  icon: const Icon(Icons.chevron_left),
+                  tooltip: 'Match précédent',
+                ),
+              
+              Text(
+                'Match ${_currentMatchIndex + 1} / ${_currentScrim.totalMatches}',
+                style: const TextStyle(color: Colors.white),
+              ),
+              
+              if (_currentMatchIndex < _currentScrim.totalMatches - 1)
+                IconButton(
+                  onPressed: () => _navigateToMatch(_currentMatchIndex + 1),
+                  style: IconButton.styleFrom(
+                    backgroundColor: const Color(0xFF3C89E8),
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.chevron_right),
+                  tooltip: 'Match suivant',
+                ),
+            ],
           ],
         ),
       ),
@@ -262,6 +574,7 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
 
   Widget _buildMatchForm(int matchNumber) {
     return Container(
+      key: Key('match_form_$_currentMatchIndex'), // Force rebuild when match changes
       color: const Color(0xFF0A1428),
       child: ScrollConfiguration(
         behavior: ScrollConfiguration.of(context).copyWith(
@@ -444,25 +757,34 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         GestureDetector(
-          onTap: () => setState(() => isVictory = true),
+          onTap: widget.readOnly ? null : () => setState(() => isVictory = true),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
               color: isVictory == true ? const Color(0xFF0596AA) : Colors.transparent,
-              border: Border.all(color: const Color(0xFF0596AA)),
+              border: Border.all(
+                color: widget.readOnly ? Colors.grey : const Color(0xFF0596AA)
+              ),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Text('Victoire', style: TextStyle(color: Colors.white)),
+            child: Text(
+              'Victoire', 
+              style: TextStyle(
+                color: widget.readOnly ? Colors.grey : Colors.white
+              )
+            ),
           ),
         ),
         const SizedBox(width: 8),
         GestureDetector(
-          onTap: () => setState(() => isVictory = false),
+          onTap: widget.readOnly ? null : () => setState(() => isVictory = false),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
               color: isVictory == false ? const Color(0xFFC8534A) : Colors.transparent,
-              border: Border.all(color: const Color(0xFFC8534A)),
+              border: Border.all(
+                color: widget.readOnly ? Colors.grey : const Color(0xFFC8534A)
+              ),
               borderRadius: BorderRadius.circular(20),
             ),
             child: const Text('Défaite', style: TextStyle(color: Colors.white)),
@@ -610,12 +932,12 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
           const SizedBox(width: 12),
           
           // KDA
-          _buildKDAInput(playerData),
+          _buildKDAInput(playerData, index, isMyTeam),
           
           const SizedBox(width: 12),
           
           // CS
-          _buildCSInput(playerData),
+          _buildCSInput(playerData, index, isMyTeam),
           
           const SizedBox(width: 12),
           
@@ -625,7 +947,7 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
           const SizedBox(width: 12),
           
           // Gold
-          _buildGoldInput(playerData),
+          _buildGoldInput(playerData, index, isMyTeam),
         ],
       ),
     );
@@ -764,15 +1086,19 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
     );
   }
   
-  Widget _buildKDAInput(MatchPlayerData playerData) {
+  Widget _buildKDAInput(MatchPlayerData playerData, int playerIndex, bool isMyTeam) {
     return Row(
       children: [
         // Kills
         SizedBox(
           width: 40,
           child: TextFormField(
-            initialValue: playerData.kills?.toString(),
-            style: const TextStyle(color: Colors.white, fontSize: 12),
+            controller: isMyTeam ? myTeamControllers[playerIndex][0] : enemyTeamControllers[playerIndex][0],
+            enabled: !widget.readOnly,
+            style: TextStyle(
+              color: widget.readOnly ? Colors.grey : Colors.white, 
+              fontSize: 12
+            ),
             decoration: const InputDecoration(
               isDense: true,
               border: OutlineInputBorder(),
@@ -781,7 +1107,7 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
             ),
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            onChanged: (value) {
+            onChanged: widget.readOnly ? null : (value) {
               setState(() {
                 playerData.kills = int.tryParse(value);
                 _calculateTeamStats();
@@ -796,8 +1122,12 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
         SizedBox(
           width: 40,
           child: TextFormField(
-            initialValue: playerData.deaths?.toString(),
-            style: const TextStyle(color: Colors.white, fontSize: 12),
+            controller: isMyTeam ? myTeamControllers[playerIndex][1] : enemyTeamControllers[playerIndex][1],
+            enabled: !widget.readOnly,
+            style: TextStyle(
+              color: widget.readOnly ? Colors.grey : Colors.white, 
+              fontSize: 12
+            ),
             decoration: const InputDecoration(
               isDense: true,
               border: OutlineInputBorder(),
@@ -806,7 +1136,7 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
             ),
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            onChanged: (value) {
+            onChanged: widget.readOnly ? null : (value) {
               setState(() {
                 playerData.deaths = int.tryParse(value);
                 _calculateTeamStats();
@@ -821,8 +1151,12 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
         SizedBox(
           width: 40,
           child: TextFormField(
-            initialValue: playerData.assists?.toString(),
-            style: const TextStyle(color: Colors.white, fontSize: 12),
+            controller: isMyTeam ? myTeamControllers[playerIndex][2] : enemyTeamControllers[playerIndex][2],
+            enabled: !widget.readOnly,
+            style: TextStyle(
+              color: widget.readOnly ? Colors.grey : Colors.white, 
+              fontSize: 12
+            ),
             decoration: const InputDecoration(
               isDense: true,
               border: OutlineInputBorder(),
@@ -831,7 +1165,7 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
             ),
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            onChanged: (value) {
+            onChanged: widget.readOnly ? null : (value) {
               setState(() {
                 playerData.assists = int.tryParse(value);
                 _calculateTeamStats();
@@ -843,12 +1177,16 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
     );
   }
   
-  Widget _buildCSInput(MatchPlayerData playerData) {
+  Widget _buildCSInput(MatchPlayerData playerData, int playerIndex, bool isMyTeam) {
     return SizedBox(
       width: 60,
       child: TextFormField(
-        initialValue: playerData.cs?.toString(),
-        style: const TextStyle(color: Colors.white, fontSize: 12),
+        controller: isMyTeam ? myTeamControllers[playerIndex][3] : enemyTeamControllers[playerIndex][3],
+        enabled: !widget.readOnly,
+        style: TextStyle(
+          color: widget.readOnly ? Colors.grey : Colors.white, 
+          fontSize: 12
+        ),
         decoration: const InputDecoration(
           isDense: true,
           border: OutlineInputBorder(),
@@ -857,9 +1195,11 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
         ),
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        onChanged: (value) {
-          playerData.cs = int.tryParse(value);
-          _calculateTeamStats();
+        onChanged: widget.readOnly ? null : (value) {
+          setState(() {
+            playerData.cs = int.tryParse(value);
+            _calculateTeamStats();
+          });
         },
       ),
     );
@@ -870,7 +1210,11 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
       width: 80,
       child: TextFormField(
         initialValue: playerData.damage?.toString(),
-        style: const TextStyle(color: Colors.white, fontSize: 12),
+        enabled: !widget.readOnly,
+        style: TextStyle(
+          color: widget.readOnly ? Colors.grey : Colors.white, 
+          fontSize: 12
+        ),
         decoration: const InputDecoration(
           isDense: true,
           border: OutlineInputBorder(),
@@ -879,7 +1223,7 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
         ),
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        onChanged: (value) {
+        onChanged: widget.readOnly ? null : (value) {
           setState(() {
             playerData.damage = int.tryParse(value);
           });
@@ -888,12 +1232,16 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
     );
   }
   
-  Widget _buildGoldInput(MatchPlayerData playerData) {
+  Widget _buildGoldInput(MatchPlayerData playerData, int playerIndex, bool isMyTeam) {
     return SizedBox(
       width: 70,
       child: TextFormField(
-        initialValue: playerData.gold?.toString(),
-        style: const TextStyle(color: Colors.white, fontSize: 12),
+        controller: isMyTeam ? myTeamControllers[playerIndex][4] : enemyTeamControllers[playerIndex][4],
+        enabled: !widget.readOnly,
+        style: TextStyle(
+          color: widget.readOnly ? Colors.grey : Colors.white, 
+          fontSize: 12
+        ),
         decoration: const InputDecoration(
           isDense: true,
           border: OutlineInputBorder(),
@@ -902,9 +1250,11 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
         ),
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        onChanged: (value) {
-          playerData.gold = int.tryParse(value);
-          _calculateTeamStats();
+        onChanged: widget.readOnly ? null : (value) {
+          setState(() {
+            playerData.gold = int.tryParse(value);
+            _calculateTeamStats();
+          });
         },
       ),
     );
@@ -949,20 +1299,75 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
     }
   }
 
-  void _previousMatch() {
+  Future<void> _previousMatch() async {
     if (_currentMatchIndex > 0) {
+      // Sauvegarder le match actuel avec feedback
+      await _saveCurrentMatch();
+      
+      // Afficher un feedback rapide
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('💾 Match ${_currentMatchIndex + 1} sauvegardé !'),
+          backgroundColor: Colors.green,
+          duration: const Duration(milliseconds: 1500),
+        ),
+      );
+      
+      // Calculer le précédent index AVANT la navigation
+      final previousMatchIndex = _currentMatchIndex - 1;
+      
+      // Naviguer vers le match précédent
       _pageController.previousPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
+      
+      // Le chargement des données sera fait automatiquement par onPageChanged
+      print('🔄 Navigation vers match ${previousMatchIndex + 1} - Chargement des données...');
     }
   }
 
-  void _nextMatch() {
+  Future<void> _nextMatch() async {
     if (_currentMatchIndex < _currentScrim.totalMatches - 1) {
+      // Sauvegarder le match actuel avant de passer au suivant
+      await _saveCurrentMatch();
+      
+      // Afficher un feedback rapide
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('💾 Match ${_currentMatchIndex + 1} sauvegardé !'),
+          backgroundColor: Colors.green,
+          duration: const Duration(milliseconds: 1500),
+        ),
+      );
+      
+      // Calculer le prochain index AVANT la navigation
+      final nextMatchIndex = _currentMatchIndex + 1;
+      
+      // Naviguer vers le match suivant
       _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
+      );
+      
+      // Le chargement des données sera fait automatiquement par onPageChanged
+      print('🔄 Navigation vers match ${nextMatchIndex + 1} - Chargement des données...');
+    }
+  }
+
+  /// Navigation directe vers un match spécifique (mode lecture seule)
+  void _navigateToMatch(int targetIndex) {
+    if (targetIndex >= 0 && targetIndex < _currentScrim.totalMatches) {
+      // Naviguer vers le match cible
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (context) => ScrimMatchDetailsScreen(
+            scrim: widget.scrim,
+            team: widget.team,
+            initialMatchIndex: targetIndex,
+            readOnly: true,
+          ),
+        ),
       );
     }
   }
@@ -1184,6 +1589,297 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
     });
   }
   
+  /// Sauvegarde le match actuel dans le scrim et le provider (même avec données incomplètes)
+  Future<void> _saveCurrentMatch() async {
+    print('🔄 Sauvegarde du match ${_currentMatchIndex + 1} (ID: $_currentMatchId)');
+    
+    // Créer les joueurs alliés (TOUS, même sans champion)
+    final myTeamPlayers = myTeamData.asMap().entries.map((entry) {
+      final index = entry.key;
+      final player = entry.value;
+      
+      return TeamPlayer(
+        playerId: player.playerId,
+        pseudo: player.playerId != null 
+            ? availablePlayers.firstWhere((p) => p.id == player.playerId, orElse: () => Player(
+                id: '', 
+                pseudo: 'Inconnu', 
+                inGameId: 'Joueur ${index + 1}', 
+                game: Game.leagueOfLegends, 
+                role: 'Mid',
+                createdAt: DateTime.now(),
+              )).inGameId
+            : player.pseudoName ?? 'Joueur ${index + 1}',
+        role: _getRoleFromChampion(player.champion) ?? _getDefaultRole(index),
+        championId: player.champion?.id ?? '',
+        kills: player.kills,
+        deaths: player.deaths,
+        assists: player.assists,
+        cs: player.cs,
+        gold: player.gold,
+        damage: player.damage,
+      );
+    }).toList();
+    
+    // Créer les joueurs ennemis (TOUS, même sans champion)
+    final enemyPlayers = enemyTeamData.asMap().entries.map((entry) {
+      final index = entry.key;
+      final player = entry.value;
+      
+      return EnemyPlayer(
+        pseudo: player.pseudoName ?? 'Ennemi ${index + 1}',
+        role: _getRoleFromChampion(player.champion) ?? _getDefaultRole(index),
+        championId: player.champion?.id ?? '',
+        kills: player.kills,
+        deaths: player.deaths,
+        assists: player.assists,
+        cs: player.cs,
+        gold: player.gold,
+        damage: player.damage,
+      );
+    }).toList();
+    
+    // Créer le match avec TOUTES les données (même nulles/incomplètes)
+    final currentMatch = ScrimMatch(
+      matchNumber: _currentMatchIndex + 1,
+      myTeamPlayers: myTeamPlayers,
+      enemyPlayers: enemyPlayers,
+      myTeamScore: myTeamKills,
+      enemyTeamScore: enemyTeamKills,
+      isVictory: isVictory,
+      matchDuration: matchDuration,
+      notes: 'Match ${_currentMatchIndex + 1} - ID: $_currentMatchId',
+      // Sauvegarder bannissements et objectifs
+      myTeamBans: List<String?>.from(myTeamBans.map((c) => c?.id)),
+      enemyTeamBans: List<String?>.from(enemyTeamBans.map((c) => c?.id)),
+      myTeamTurrets: myTeamTurrets,
+      enemyTeamTurrets: enemyTeamTurrets,
+      myTeamDragons: myTeamDragons,
+      enemyTeamDragons: enemyTeamDragons,
+      myTeamBarons: myTeamBarons,
+      enemyTeamBarons: enemyTeamBarons,
+      myTeamHeralds: myTeamHeralds,
+      enemyTeamHeralds: enemyTeamHeralds,
+      myTeamGroms: myTeamGroms,
+      enemyTeamGroms: enemyTeamGroms,
+      myTeamNexusTurrets: myTeamNexusTurrets,
+      enemyTeamNexusTurrets: enemyTeamNexusTurrets,
+    );
+
+    // Mettre à jour le match existant dans le scrim (modification en place)
+    final updatedMatches = List<ScrimMatch>.from(_currentScrim.matches);
+    final matchIndex = _currentMatchIndex;
+    
+    // S'assurer que l'index est valide
+    if (matchIndex < updatedMatches.length) {
+      updatedMatches[matchIndex] = currentMatch;
+    } else {
+      // Étendre la liste si nécessaire (ne devrait pas arriver avec la nouvelle logique)
+      while (updatedMatches.length <= matchIndex) {
+        updatedMatches.add(currentMatch);
+      }
+      updatedMatches[matchIndex] = currentMatch;
+    }
+    
+    // Recalculer les victoires
+    int newMyWins = 0;
+    int newEnemyWins = 0;
+    for (final m in updatedMatches) {
+      if (m.isVictory == true) newMyWins++;
+      if (m.isVictory == false) newEnemyWins++;
+    }
+    
+    final updatedScrim = _currentScrim.copyWith(
+      matches: updatedMatches,
+      myTeamWins: newMyWins,
+      enemyTeamWins: newEnemyWins,
+      playedAt: DateTime.now(),
+    );
+    
+    // Sauvegarder via le provider (persiste dans le JSON)
+    try {
+      final scrimsProvider = context.read<ScrimsProvider>();
+      await scrimsProvider.updateScrim(updatedScrim);
+      
+      setState(() {
+        _currentScrim = updatedScrim;
+      });
+      
+      print('✅ Match ${_currentMatchIndex + 1} sauvegardé avec succès dans le JSON');
+      print('   - Mon équipe: ${myTeamPlayers.length} joueurs');
+      print('   - Équipe adverse: ${enemyPlayers.length} joueurs');
+      print('   - Résultat: ${isVictory == null ? "Non défini" : (isVictory! ? "Victoire" : "Défaite")}');
+      print('   - Durée: ${matchDuration.inMinutes} min');
+      print('   - Objectifs: T$myTeamTurrets-$enemyTeamTurrets | D$myTeamDragons-$enemyTeamDragons | B$myTeamBarons-$enemyTeamBarons');
+    } catch (e) {
+      print('❌ Erreur lors de la sauvegarde: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur de sauvegarde: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Import des données depuis une screenshot
+  Future<void> _importFromScreenshot() async {
+    try {
+      // Afficher le choix entre caméra et fichier
+      final source = await showDialog<ImageSource>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Importer une screenshot'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Choisissez la source de l\'image :'),
+              const SizedBox(height: 16),
+              
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Color(0xFF3C89E8)),
+                title: const Text('Fichier'),
+                subtitle: const Text('Choisir une image depuis votre ordinateur'),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+              
+              ListTile(
+                leading: const Icon(Icons.camera_alt, color: Color(0xFF3C89E8)),
+                title: const Text('Caméra'),
+                subtitle: const Text('Prendre une photo'),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+            ],
+          ),
+        ),
+      );
+      
+      if (source == null) return;
+      
+      File? imageFile;
+      
+      if (source == ImageSource.gallery) {
+        // Utiliser file_picker pour plus de flexibilité
+        final result = await FilePicker.platform.pickFiles(
+          type: FileType.image,
+          allowedExtensions: ['jpg', 'jpeg', 'png', 'bmp'],
+        );
+        
+        if (result != null && result.files.single.path != null) {
+          imageFile = File(result.files.single.path!);
+        }
+      } else {
+        // Utiliser image_picker pour la caméra
+        final picker = ImagePicker();
+        final pickedFile = await picker.pickImage(source: source);
+        
+        if (pickedFile != null) {
+          imageFile = File(pickedFile.path);
+        }
+      }
+      
+      if (imageFile == null) return;
+      
+      if (!mounted) return;
+      
+      // Naviguer vers l'écran de prévisualisation
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ScreenshotPreviewScreen(
+            screenshotFile: imageFile!,
+            onConfirm: _applyScreenshotData,
+          ),
+        ),
+      );
+      
+    } catch (e) {
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur lors de l\'import: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  /// Applique les données extraites de la screenshot au match actuel
+  void _applyScreenshotData(List<Map<String, dynamic>> myTeam, List<Map<String, dynamic>> enemyTeam) {
+    setState(() {
+      // Appliquer les données de mon équipe
+      for (int i = 0; i < myTeam.length && i < myTeamData.length; i++) {
+        final extractedData = myTeam[i];
+        
+        // Copier les stats extraites
+        myTeamData[i].kills = extractedData['kills'] as int? ?? 0;
+        myTeamData[i].deaths = extractedData['deaths'] as int? ?? 0;
+        myTeamData[i].assists = extractedData['assists'] as int? ?? 0;
+        myTeamData[i].cs = extractedData['cs'] as int? ?? 0;
+        myTeamData[i].gold = extractedData['gold'] as int? ?? 0;
+        
+        // Conserver les autres données existantes (joueur, champion)
+      }
+      
+      // Appliquer les données de l'équipe adverse
+      for (int i = 0; i < enemyTeam.length && i < enemyTeamData.length; i++) {
+        final extractedData = enemyTeam[i];
+        
+        // Copier les stats extraites
+        enemyTeamData[i].kills = extractedData['kills'] as int? ?? 0;
+        enemyTeamData[i].deaths = extractedData['deaths'] as int? ?? 0;
+        enemyTeamData[i].assists = extractedData['assists'] as int? ?? 0;
+        enemyTeamData[i].cs = extractedData['cs'] as int? ?? 0;
+        enemyTeamData[i].gold = extractedData['gold'] as int? ?? 0;
+      }
+      
+      // Recalculer les statistiques d'équipe
+      _calculateTeamStats();
+      
+      // Mettre à jour tous les controllers
+      _updateAllControllers();
+    });
+    
+    // Afficher une confirmation
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white),
+            const SizedBox(width: 8),
+            Text(
+              'Screenshot importée ! ${myTeam.length + enemyTeam.length} joueurs mis à jour',
+            ),
+          ],
+        ),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+    
+    print('📸 Screenshot importée:');
+    print('  - Mon équipe: ${myTeam.length} joueurs');
+    print('  - Équipe adverse: ${enemyTeam.length} joueurs');
+  }
+  
+  /// Utilitaire pour déterminer le rôle d'après le champion (approximatif)
+  String? _getRoleFromChampion(Champion? champion) {
+    if (champion == null) return null;
+    return champion.role;
+  }
+  
+  /// Rôle par défaut basé sur la position dans l'équipe (index)
+  String _getDefaultRole(int index) {
+    switch (index) {
+      case 0: return 'Top';
+      case 1: return 'Jungle';
+      case 2: return 'Mid';
+      case 3: return 'ADC';
+      case 4: return 'Support';
+      default: return 'Mid';
+    }
+  }
+
   /// Crée un template vide pour les parties personnalisées
   void _createCustomGameTemplate() {
     setState(() {
@@ -1253,7 +1949,19 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
   }
   
   Future<void> _finishScrim() async {
-    // TODO: Sauvegarder les données du match
+    // Sauvegarder le match final
+    await _saveCurrentMatch();
+    
+    // Afficher un message de confirmation
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('🏆 Scrim terminé ! Tous les matchs sauvegardés (${_currentScrim.matches.length}/${_currentScrim.totalMatches})'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+    
+    // Retourner à l'écran précédent avec confirmation de sauvegarde
     Navigator.of(context).pop(true);
   }
   
@@ -1341,7 +2049,7 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
                     enemyTeamTurrets = val ?? 0;
                   }
                 });
-              }),
+              }, isMyTeam),
             ),
             const SizedBox(width: 6),
             Expanded(
@@ -1353,7 +2061,7 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
                     enemyTeamDragons = val ?? 0;
                   }
                 });
-              }),
+              }, isMyTeam),
             ),
             const SizedBox(width: 6),
             Expanded(
@@ -1365,7 +2073,7 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
                     enemyTeamBarons = val ?? 0;
                   }
                 });
-              }),
+              }, isMyTeam),
             ),
           ],
         ),
@@ -1381,7 +2089,7 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
                     enemyTeamHeralds = val ?? 0;
                   }
                 });
-              }),
+              }, isMyTeam),
             ),
             const SizedBox(width: 6),
             Expanded(
@@ -1393,7 +2101,7 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
                     enemyTeamGroms = val ?? 0;
                   }
                 });
-              }),
+              }, isMyTeam),
             ),
             const SizedBox(width: 6),
             Expanded(
@@ -1405,7 +2113,7 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
                     enemyTeamNexusTurrets = (val ?? 0) > 0;
                   }
                 });
-              }),
+              }, isMyTeam),
             ),
           ],
         ),
@@ -1413,7 +2121,7 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
     );
   }
 
-  Widget _buildObjectiveIcon(String label, int count, Function(int?) onChanged) {
+  Widget _buildObjectiveIcon(String label, int count, Function(int?) onChanged, bool isMyTeam) {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
@@ -1436,8 +2144,13 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
             width: 30,
             height: 24,
             child: TextFormField(
-              initialValue: count.toString(),
-              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+              controller: objectiveControllers['${isMyTeam ? 'my' : 'enemy'}_$label'],
+              enabled: !widget.readOnly,
+              style: TextStyle(
+                color: widget.readOnly ? Colors.grey : Colors.white, 
+                fontSize: 10, 
+                fontWeight: FontWeight.bold
+              ),
               decoration: const InputDecoration(
                 isDense: true,
                 border: OutlineInputBorder(),
@@ -1448,7 +2161,7 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
               textAlign: TextAlign.center,
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              onChanged: (val) => onChanged(int.tryParse(val)),
+              onChanged: widget.readOnly ? null : (val) => onChanged(int.tryParse(val)),
             ),
           ),
         ],
