@@ -1,6 +1,5 @@
 import '../models/scrim.dart';
 import '../models/player.dart';
-import '../models/player_stats.dart';
 import 'query_types.dart';
 import 'query_result.dart';
 
@@ -133,12 +132,12 @@ class QueryEngine {
   ) async {
     if (parameters.playerId == null) return [];
 
-    final playerStats = <String, List<PlayerStats>>{};
+    final playerStats = <String, List<TeamPlayer>>{};
 
     for (final scrim in scrims) {
       final stats = scrim.getPlayerStats(parameters.playerId!);
       if (stats != null) {
-        playerStats.putIfAbsent(stats.champion, () => []).add(stats);
+        playerStats.putIfAbsent(stats.championId, () => []).add(stats);
       }
     }
 
@@ -150,9 +149,9 @@ class QueryEngine {
       if (statsList.isEmpty) continue;
 
       final avgKDA = statsList.map((s) => s.kdaScore).reduce((a, b) => a + b) / statsList.length;
-      final totalKills = statsList.fold(0, (sum, s) => sum + s.kills);
-      final totalDeaths = statsList.fold(0, (sum, s) => sum + s.deaths);
-      final totalAssists = statsList.fold(0, (sum, s) => sum + s.assists);
+      final totalKills = statsList.fold(0, (sum, s) => sum + (s.kills ?? 0));
+      final totalDeaths = statsList.fold(0, (sum, s) => sum + (s.deaths ?? 0));
+      final totalAssists = statsList.fold(0, (sum, s) => sum + (s.assists ?? 0));
 
       results.add(QueryResult.averageKDA(
         id: 'avg_kda_$champion',
@@ -195,14 +194,14 @@ class QueryEngine {
         final teamStats = teamPerformance[teamName]!;
         teamStats['games'] = teamStats['games'] + 1;
         
-        if (scrim.isVictory) {
+        if (scrim.isVictory == true) {
           teamStats['wins'] = teamStats['wins'] + 1;
         }
         
         teamStats['totalKDA'] = teamStats['totalKDA'] + stats.kdaScore;
         
-        if (!(teamStats['champions'] as List<String>).contains(stats.champion)) {
-          (teamStats['champions'] as List<String>).add(stats.champion);
+        if (!(teamStats['champions'] as List<String>).contains(stats.championId)) {
+          (teamStats['champions'] as List<String>).add(stats.championId);
         }
       }
     }
@@ -239,22 +238,24 @@ class QueryEngine {
 
     for (final scrim in scrims.where((s) => s.myTeamId == parameters.teamId)) {
       for (final stats in scrim.myTeamStats) {
-        championStats.putIfAbsent(stats.champion, () => {
+        championStats.putIfAbsent(stats.championId, () => {
           'games': 0,
           'wins': 0,
           'totalKDA': 0.0,
           'players': <String>{},
         });
 
-        final champStats = championStats[stats.champion]!;
+        final champStats = championStats[stats.championId]!;
         champStats['games'] = champStats['games'] + 1;
         
-        if (scrim.isVictory) {
+        if (scrim.isVictory == true) {
           champStats['wins'] = champStats['wins'] + 1;
         }
         
         champStats['totalKDA'] = champStats['totalKDA'] + stats.kdaScore;
-        (champStats['players'] as Set<String>).add(stats.playerId);
+        if (stats.playerId != null) {
+          (champStats['players'] as Set<String>).add(stats.playerId!);
+        }
       }
     }
 

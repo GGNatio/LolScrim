@@ -1,23 +1,22 @@
 import 'dart:io';
 import 'dart:math';
 import '../models/player.dart';
-import 'ocr_orchestrator.dart';
 
-/// 🔍 SERVICE D'ANALYSE DE SCREENSHOT ULTRA-PRÉCIS
+/// SERVICE D'ANALYSE DE SCREENSHOT
 class ScreenshotAnalyzer {
   static final _players = <Player>[];
   static bool _playersLoaded = false;
 
-  /// 🚀 ANALYSE SCREENSHOT AVEC OCR ULTRA-PRÉCIS
+  /// ANALYSE SCREENSHOT AVEC OCR
   static Future<Map<String, dynamic>> analyzeScreenshot(File imageFile) async {
-    print('🔍 === ANALYSE SCREENSHOT ULTRA-PRÉCIS ===');
-    print('📁 Image: ${imageFile.path}');
+    print('Starting screenshot analysis');
+    print('Image: ${imageFile.path}');
     
     await _loadPlayersDatabase();
     
     try {
-      // Utiliser le nouvel orchestrateur OCR ultra-précis
-      final gameData = await OCROrchestrator.analyzeLoLScreenshot(imageFile.path);
+      // Utiliser une analyse directe sans fichier externe
+      final gameData = await _performDirectAnalysis(imageFile.path);
       
       // Reconnaissance des joueurs de l'équipe
       await _recognizePlayersInDatabase(gameData);
