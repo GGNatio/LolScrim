@@ -15,7 +15,7 @@ class LoLParser {
     'O': '0', 'o': '0', 'l': '1', 'I': '1', 'S': '5', 'G': '6', 'T': '7', 'B': '8',
     // Lettres communes
     '0': 'O', '1': 'l', '5': 'S', '6': 'G', '8': 'B',
-    // Caractères spéciaux
+    // Caracteres speciaux
     '|': 'I', '/': '/', '\\': '/', '"': '', '\'': '',
   };
   

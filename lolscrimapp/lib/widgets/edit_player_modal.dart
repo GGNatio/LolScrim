@@ -108,7 +108,7 @@ class _EditPlayerModalState extends State<EditPlayerModal> {
     switch (_selectedGame) {
       case Game.leagueOfLegends:
       case Game.wildRift:
-        return 'Nom d\'invocateur';
+        return 'Nom invocateur';
       case Game.valorant:
         return 'Riot ID (ex: Pseudo#TAG)';
       case Game.teamfightTactics:

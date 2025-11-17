@@ -93,7 +93,7 @@ class ScoreboardParser {
     // D'abord essayer zone nom spécifique
     for (final text in nameTexts) {
       final cleaned = _cleanPlayerName(text);
-      if (cleaned.isNotEmpty && cleaned.length >= 2) {
+      if (cleaned.isNotEmpty && cleaned.length >= 2 && cleaned.length <= 16) {
         return cleaned;
       }
     }
@@ -111,6 +111,14 @@ class ScoreboardParser {
             return _cleanPlayerName(name);
           }
         }
+      }
+    }
+    
+    // En dernier recours, prendre le premier texte nettoyé
+    if (nameTexts.isNotEmpty) {
+      final cleaned = _cleanPlayerName(nameTexts.first);
+      if (cleaned.length >= 2 && cleaned.length <= 16) {
+        return cleaned;
       }
     }
     
@@ -179,11 +187,8 @@ class ScoreboardParser {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
     
-    // Corrections OCR communes
-    cleaned = cleaned
-        .replaceAll('0', 'O')
-        .replaceAll('1', 'l')
-        .replaceAll('5', 'S');
+    // Ne pas faire de corrections automatiques qui pourraient altérer les noms réels
+    // Les joueurs peuvent avoir des 0, 1, 5 dans leurs noms
     
     return cleaned;
   }

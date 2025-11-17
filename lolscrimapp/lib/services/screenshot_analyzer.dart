@@ -1,22 +1,26 @@
 import 'dart:io';
 import 'dart:math';
 import '../models/player.dart';
+import 'ocr_orchestrator.dart';
 
 /// SERVICE D'ANALYSE DE SCREENSHOT
 class ScreenshotAnalyzer {
   static final _players = <Player>[];
   static bool _playersLoaded = false;
 
-  /// ANALYSE SCREENSHOT AVEC OCR
-  static Future<Map<String, dynamic>> analyzeScreenshot(File imageFile) async {
-    print('Starting screenshot analysis');
-    print('Image: ${imageFile.path}');
+  /// ANALYSE SCREENSHOT AVEC OCR RÉEL
+  static Future<Map<String, dynamic>> analyzeScreenshot(
+    File imageFile, {
+    Function(double, String)? onProgress,
+  }) async {
+    print('🔍 Démarrage analyse screenshot');
+    print('📁 Image: ${imageFile.path}');
     
     await _loadPlayersDatabase();
     
     try {
-      // Utiliser une analyse directe sans fichier externe
-      final gameData = await _performDirectAnalysis(imageFile.path);
+      // Utiliser le vrai OCR
+      final gameData = await _performDirectAnalysis(imageFile, onProgress: onProgress);
       
       // Reconnaissance des joueurs de l'équipe
       await _recognizePlayersInDatabase(gameData);
@@ -24,12 +28,42 @@ class ScreenshotAnalyzer {
       print('✅ Analyse OCR terminée avec ${gameData['players']?.length ?? 0} joueurs!');
       return gameData;
       
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ ERREUR OCR: $e');
+      print('Stack: $stackTrace');
       print('🔄 Fallback vers système de secours...');
       
+      onProgress?.call(1.0, 'Erreur - utilisation du mode de secours');
       // En cas d'échec OCR, utiliser système de secours basé sur hash
       return _generateFallbackFromImage(imageFile);
+    }
+  }
+
+  /// 🔍 ANALYSE DIRECTE AVEC TESSERACT OCR
+  static Future<Map<String, dynamic>> _performDirectAnalysis(
+    File imageFile, {
+    Function(double, String)? onProgress,
+  }) async {
+    print('🎯 Lancement OCR Tesseract réel...');
+    
+    try {
+      // Utiliser le vrai système OCR
+      final result = await OCROrchestrator.analyzeLoLScreenshot(
+        imageFile.path,
+        onProgress: onProgress,
+      );
+      
+      // Le résultat contient déjà les joueurs parsés
+      if (result['players'] != null && (result['players'] as List).isNotEmpty) {
+        print('✅ OCR réussi: ${(result['players'] as List).length} joueurs détectés');
+        return result;
+      } else {
+        print('⚠️ OCR n\'a détecté aucun joueur, passage au fallback');
+        return _generateFallbackFromImage(imageFile);
+      }
+    } catch (e) {
+      print('❌ Erreur OCR Tesseract: $e');
+      rethrow;
     }
   }
   

@@ -20,6 +20,8 @@ class ScreenshotPreviewScreen extends StatefulWidget {
 class _ScreenshotPreviewScreenState extends State<ScreenshotPreviewScreen> {
   Map<String, dynamic>? _analysisResult;
   bool _isAnalyzing = true;
+  double _analysisProgress = 0.0;
+  String _analysisMessage = 'Demarrage...';
   List<Map<String, dynamic>> _myTeamData = [];
   List<Map<String, dynamic>> _enemyTeamData = [];
 
@@ -30,10 +32,22 @@ class _ScreenshotPreviewScreenState extends State<ScreenshotPreviewScreen> {
   }
 
   Future<void> _analyzeScreenshot() async {
-    setState(() => _isAnalyzing = true);
+    setState(() {
+      _isAnalyzing = true;
+      _analysisProgress = 0.0;
+      _analysisMessage = 'Demarrage de l\'analyse...';
+    });
     
     try {
-      final result = await ScreenshotAnalyzer.analyzeScreenshot(widget.screenshotFile);
+      final result = await ScreenshotAnalyzer.analyzeScreenshot(
+        widget.screenshotFile,
+        onProgress: (progress, message) {
+          setState(() {
+            _analysisProgress = progress;
+            _analysisMessage = message;
+          });
+        },
+      );
       final players = (result['players'] as List<dynamic>?) ?? [];
       
       setState(() {
@@ -66,17 +80,108 @@ class _ScreenshotPreviewScreenState extends State<ScreenshotPreviewScreen> {
       ),
       backgroundColor: const Color(0xFF1E1E2E),
       body: _isAnalyzing
-          ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: Colors.purple),
-                  SizedBox(height: 20),
-                  Text(
-                    'Analyse en cours...',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                ],
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(40.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Icon animé
+                    const SizedBox(
+                      width: 80,
+                      height: 80,
+                      child: CircularProgressIndicator(
+                        color: Colors.purple,
+                        strokeWidth: 6,
+                      ),
+                    ),
+                    const SizedBox(height: 40),
+                    
+                    // Titre
+                    const Text(
+                      'Analyse OCR en cours',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+                    
+                    // Barre de progression
+                    Container(
+                      width: double.infinity,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[800],
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: _analysisProgress,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Colors.purple, Colors.purpleAccent],
+                            ),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    
+                    // Pourcentage et message
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _analysisMessage,
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          '${(_analysisProgress * 100).toInt()}%',
+                          style: const TextStyle(
+                            color: Colors.purpleAccent,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 30),
+                    
+                    // Info
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.purple.withOpacity(0.3),
+                        ),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.purpleAccent, size: 20),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Analyse multi-passes avec Tesseract OCR pour une precision optimale',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             )
           : _buildContent(),

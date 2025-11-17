@@ -1,8 +1,4 @@
-import 'dart:ffi';
 import 'dart:io';
-import 'dart:typed_data';
-import 'package:ffi/ffi.dart';
-import 'package:image/image.dart' as img;
 
 /// 🔍 MOTEUR TESSERACT ULTRA-PRÉCIS POUR LOL
 class TesseractEngine {
@@ -13,7 +9,7 @@ class TesseractEngine {
     String language = 'eng',
     Map<String, String>? ocrConfig,
   }) async {
-    print('🔍 === TESSERACT OCR ULTRA-PRÉCIS ===');
+    print('🔍 === TESSERACT OCR ULTRA-PRECIS ===');
     print('📁 Image: $imagePath');
     
     try {
@@ -70,23 +66,29 @@ class TesseractEngine {
   
   /// ⚙️ CONFIGURATION TESSERACT OPTIMISÉE POUR LOL
   static List<String> _buildTesseractConfig(Map<String, String>? customConfig) {
-    final defaultConfig = {
-      // Optimisations pour texte blanc sur fond sombre (LoL)
-      '-c': 'tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 /',
-      '--psm': '6', // Uniform block of text
-      '--oem': '3', // Default OCR Engine Mode
-    };
-    
-    final config = {...defaultConfig, ...?customConfig};
     final args = <String>[];
     
-    config.forEach((key, value) {
-      if (key == '-c') {
-        args.addAll(['-c', value]);
-      } else {
-        args.addAll([key, value]);
-      }
-    });
+    // Configuration par défaut pour LoL (texte blanc sur fond sombre)
+    args.addAll(['--psm', '7']); // Single text line (meilleur pour noms de joueurs et stats)
+    args.addAll(['--oem', '3']); // Default OCR Engine Mode
+    
+    // Whitelist de caractères pour réduire les erreurs
+    args.addAll(['-c', 'tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 /-']);
+    
+    // Configuration personnalisée (override)
+    if (customConfig != null) {
+      customConfig.forEach((key, value) {
+        if (key == '-c') {
+          // Remplacer la whitelist
+          final idx = args.indexOf('-c');
+          if (idx != -1 && idx + 1 < args.length) {
+            args[idx + 1] = value;
+          }
+        } else {
+          args.addAll([key, value]);
+        }
+      });
+    }
     
     return args;
   }
