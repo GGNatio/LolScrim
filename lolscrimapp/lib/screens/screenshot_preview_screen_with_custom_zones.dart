@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import '../services/ocr_orchestrator.dart';
 import 'ocr_results_editor_screen.dart';
@@ -140,6 +141,9 @@ class _ScreenshotPreviewScreenWithCustomZonesState extends State<ScreenshotPrevi
 
   @override
   Widget build(BuildContext context) {
+    // Maintenir le plein écran pour éviter les décalages
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    
     return Scaffold(
       backgroundColor: const Color(0xFF1E1E2E),
       appBar: AppBar(
@@ -147,16 +151,24 @@ class _ScreenshotPreviewScreenWithCustomZonesState extends State<ScreenshotPrevi
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('🎯 Résultats OCR Zones Personnalisées'),
+            Text('🎯 Résultats OCR - PLEIN ÉCRAN STABLE'),
             Text(
-              'Analyse terminée avec vos zones ultra-précises',
+              'Zones personnalisées ultra-précises',
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
             ),
           ],
         ),
         backgroundColor: Colors.deepPurple,
         foregroundColor: Colors.white,
-        toolbarHeight: 70,
+        toolbarHeight: 60,
+        automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+            tooltip: 'Fermer',
+          ),
+        ],
       ),
       body: _isAnalyzing ? _buildAnalysisProgress() : _buildResults(),
     );

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'screenshot_preview_screen.dart';
 import 'screenshot_preview_screen_with_custom_zones.dart';
@@ -184,22 +185,33 @@ class _InteractiveOCRPreviewScreenState extends State<InteractiveOCRPreviewScree
   
   @override
   Widget build(BuildContext context) {
+    // Forcer le plein écran pour cet écran spécifiquement
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    
     return Scaffold(
       appBar: AppBar(
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('🎯 Prévisualisation OCR Interactive'),
+            Text('🎯 Prévisualisation OCR Interactive - PLEIN ÉCRAN'),
             Text(
-              '📌 Image centrée et verrouillée - Zones ajustables',
+              '📌 Zones fixes - Plus de décalage avec redimensionnement',
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
             ),
           ],
         ),
         backgroundColor: Colors.deepPurple,
         foregroundColor: Colors.white,
-        toolbarHeight: 70,
+        toolbarHeight: 60,
+        automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+            tooltip: 'Fermer',
+          ),
+        ],
       ),
       body: Column(
         children: [
