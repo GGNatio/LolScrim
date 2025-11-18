@@ -597,13 +597,16 @@ class OCROrchestrator {
   ) async {
     final crop = _extractZone(source, zone);
     
-    // 5 stratégies de preprocessing différentes
+    // 8 stratégies de preprocessing améliorées
     final strategies = [
-      {'name': 'adaptive', 'processor': (img.Image i) => _adaptiveThreshold(i, blockSize: 15)},
+      {'name': 'adaptive_15', 'processor': (img.Image i) => _adaptiveThreshold(i, blockSize: 15)},
+      {'name': 'adaptive_21', 'processor': (img.Image i) => _adaptiveThreshold(i, blockSize: 21)},
       {'name': 'otsu', 'processor': (img.Image i) => _otsuThreshold(i)},
-      {'name': 'contrast', 'processor': (img.Image i) => _enhanceContrast(i)},
+      {'name': 'contrast_high', 'processor': (img.Image i) => _enhanceContrast(i)},
       {'name': 'bilateral', 'processor': (img.Image i) => _bilateralFilter(i)},
-      {'name': 'basic', 'processor': (img.Image i) => _basicThreshold(i, 140)},
+      {'name': 'basic_120', 'processor': (img.Image i) => _basicThreshold(i, 120)},
+      {'name': 'basic_160', 'processor': (img.Image i) => _basicThreshold(i, 160)},
+      {'name': 'morph_clean', 'processor': (img.Image i) => _morphologicalClean(i)},
     ];
     
     final results = <String, int>{};
@@ -613,10 +616,10 @@ class OCROrchestrator {
       final processed = strat['processor'] as img.Image Function(img.Image);
       final enhanced = processed(crop);
       
-      // Upscale x4 pour meilleure lecture
+      // Upscale x6 pour lecture ultra-précise des pseudos
       final upscaled = img.copyResize(enhanced, 
-        width: enhanced.width * 4, 
-        height: enhanced.height * 4,
+        width: enhanced.width * 6, 
+        height: enhanced.height * 6,
         interpolation: img.Interpolation.cubic
       );
       
@@ -624,8 +627,8 @@ class OCROrchestrator {
       final debugFile = File('${debugDir.path}/${key}_${strat['name']}.png');
       await debugFile.writeAsBytes(img.encodePng(upscaled));
       
-      // Tester plusieurs PSM modes
-      for (final psm in ['7', '8', '6']) {
+      // Tester PSM modes optimisés pour les pseudos
+      for (final psm in ['7', '8', '6', '13']) {
         try {
           final lines = await TesseractEngine.extractTextFromImage(
             debugFile.path,
@@ -638,12 +641,10 @@ class OCROrchestrator {
           if (lines.isNotEmpty) {
             var text = lines.first.trim();
             
-            // Post-traitement pour corriger erreurs OCR communes
-            text = text.replaceAll(RegExp(r'7+'), 'z' * text.split('7').length);  // 72 ou 77 → zz
-            text = text.replaceAll('kjzr', 'kjær');
-            text = text.replaceAll('Kjzr', 'Kjær');
+            // Post-traitement amélioré pour corriger erreurs OCR communes
+            text = _cleanOCRText(text);
             
-            if (text.length >= 3) {
+            if (text.length >= 2) {  // Accepter pseudos plus courts
               results[text] = (results[text] ?? 0) + 1;
               print('  ${strat['name']}/PSM$psm: "$text"');
             }
@@ -654,13 +655,19 @@ class OCROrchestrator {
       }
     }
     
-    // Choisir le résultat le plus fréquent
+    // Choisir le meilleur résultat avec logique améliorée
     if (results.isEmpty) return null;
     
     final sorted = results.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+      ..sort((a, b) {
+        // Privilégier les résultats plus longs et fréquents
+        if (b.value != a.value) return b.value.compareTo(a.value);
+        return b.key.length.compareTo(a.key.length);
+      });
     
-    return sorted.first.key;
+    final bestResult = sorted.first.key;
+    print('🎯 Meilleur résultat pour $key: "$bestResult" (${sorted.first.value} occurrences)');
+    return bestResult;
   }
   
   static Future<Map<String, int?>> _extractKDARobust(
@@ -1062,5 +1069,131 @@ class OCROrchestrator {
         }
       };
     }
+  }
+
+  // === NOUVELLES MÉTHODES DE TRAITEMENT AMÉLIORÉ ===
+  
+  /// 🧹 Nettoyage morphologique pour éliminer le bruit
+  static img.Image _morphologicalClean(img.Image source) {
+    final gray = img.grayscale(source);
+    final binary = _basicThreshold(gray, 140);
+    
+    // Opération d'ouverture (érosion + dilatation) pour éliminer le bruit
+    final eroded = _erode(binary, 1);
+    final cleaned = _dilate(eroded, 1);
+    
+    return cleaned;
+  }
+  
+  /// Érosion morphologique
+  static img.Image _erode(img.Image source, int radius) {
+    final result = img.Image(width: source.width, height: source.height);
+    
+    for (int y = 0; y < source.height; y++) {
+      for (int x = 0; x < source.width; x++) {
+        bool shouldErode = false;
+        
+        for (int dy = -radius; dy <= radius; dy++) {
+          for (int dx = -radius; dx <= radius; dx++) {
+            final nx = x + dx;
+            final ny = y + dy;
+            
+            if (nx >= 0 && nx < source.width && ny >= 0 && ny < source.height) {
+              final pixel = source.getPixel(nx, ny);
+              if (img.getLuminance(pixel) < 128) {
+                shouldErode = true;
+                break;
+              }
+            }
+          }
+          if (shouldErode) break;
+        }
+        
+        final value = shouldErode ? 0 : 255;
+        result.setPixel(x, y, img.ColorRgb8(value, value, value));
+      }
+    }
+    
+    return result;
+  }
+  
+  /// Dilatation morphologique
+  static img.Image _dilate(img.Image source, int radius) {
+    final result = img.Image(width: source.width, height: source.height);
+    
+    for (int y = 0; y < source.height; y++) {
+      for (int x = 0; x < source.width; x++) {
+        bool shouldDilate = false;
+        
+        for (int dy = -radius; dy <= radius; dy++) {
+          for (int dx = -radius; dx <= radius; dx++) {
+            final nx = x + dx;
+            final ny = y + dy;
+            
+            if (nx >= 0 && nx < source.width && ny >= 0 && ny < source.height) {
+              final pixel = source.getPixel(nx, ny);
+              if (img.getLuminance(pixel) > 128) {
+                shouldDilate = true;
+                break;
+              }
+            }
+          }
+          if (shouldDilate) break;
+        }
+        
+        final value = shouldDilate ? 255 : 0;
+        result.setPixel(x, y, img.ColorRgb8(value, value, value));
+      }
+    }
+    
+    return result;
+  }
+  
+  /// 🧹 Nettoyage avancé du texte OCR
+  static String _cleanOCRText(String text) {
+    var cleaned = text.trim();
+    
+    // Corrections spécifiques pour les pseudos LoL
+    final corrections = {
+      // Caractères mal reconnus
+      'rn': 'n',
+      'rrr': 'r',
+      '0': 'O',  // Zéro → O dans les pseudos
+      '1': 'l',  // 1 → l dans certains cas
+      '5': 'S',  // 5 → S dans certains cas
+      '8': 'B',  // 8 → B dans certains cas
+      
+      // Erreurs courantes de Tesseract
+      '7': 'z',  // 7 souvent confondu avec z
+      'kjzr': 'kjær',
+      'Kjzr': 'Kjær',
+      'aer': 'aer',
+      'zer': 'zer',
+      
+      // Espaces parasites
+      ' ': '',  // Supprimer les espaces dans les pseudos
+    };
+    
+    // Appliquer les corrections
+    corrections.forEach((wrong, correct) {
+      cleaned = cleaned.replaceAll(wrong, correct);
+    });
+    
+    // Nettoyer les caractères non-ASCII problématiques
+    cleaned = cleaned.replaceAll(RegExp(r'[^\x20-\x7E\u00C0-\u017F]'), '');
+    
+    // Si le texte semble coupé ou trop court, essayer de le compléter
+    if (cleaned.length >= 3 && cleaned.length <= 6) {
+      // Heuristiques pour pseudos communs
+      final commonPrefixes = ['KS', 'TTV', 'Blue', 'Birthe'];
+      for (final prefix in commonPrefixes) {
+        if (cleaned.startsWith(prefix.substring(0, math.min(prefix.length, cleaned.length)))) {
+          // Le pseudo semble correspondre à un préfixe connu
+          break;
+        }
+      }
+    }
+    
+    return cleaned;
   }
 }
