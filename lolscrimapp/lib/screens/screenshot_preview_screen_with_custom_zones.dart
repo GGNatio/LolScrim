@@ -141,9 +141,6 @@ class _ScreenshotPreviewScreenWithCustomZonesState extends State<ScreenshotPrevi
 
   @override
   Widget build(BuildContext context) {
-    // Maintenir le plein écran pour éviter les décalages
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    
     return Scaffold(
       backgroundColor: const Color(0xFF1E1E2E),
       appBar: AppBar(
@@ -151,7 +148,7 @@ class _ScreenshotPreviewScreenWithCustomZonesState extends State<ScreenshotPrevi
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('🎯 Résultats OCR - PLEIN ÉCRAN STABLE'),
+            Text('🎯 Résultats OCR - Fenêtre Maximisée'),
             Text(
               'Zones personnalisées ultra-précises',
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w400),

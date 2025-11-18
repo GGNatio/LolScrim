@@ -25,9 +25,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   FlutterWindow window(project);
-  Win32Window::Point origin(0, 0);  // Centrer la fenêtre
-  Win32Window::Size size(1920, 1080);  // Taille Full HD
-  if (!window.Create(L"LolScrim Manager - 1920x1080", origin, size)) {
+  
+  // Obtenir les dimensions de l'écran pour plein écran
+  int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+  int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+  
+  Win32Window::Point origin(0, 0);  // Position en haut à gauche
+  Win32Window::Size size(screenWidth, screenHeight);  // Plein écran
+  if (!window.Create(L"LolScrim Manager - PLEIN ÉCRAN", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

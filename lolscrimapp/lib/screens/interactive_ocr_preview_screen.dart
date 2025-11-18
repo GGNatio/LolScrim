@@ -185,18 +185,15 @@ class _InteractiveOCRPreviewScreenState extends State<InteractiveOCRPreviewScree
   
   @override
   Widget build(BuildContext context) {
-    // Forcer le plein écran pour cet écran spécifiquement
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    
     return Scaffold(
       appBar: AppBar(
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('🎯 Prévisualisation OCR Interactive - PLEIN ÉCRAN'),
+            Text('🎯 Prévisualisation OCR Interactive'),
             Text(
-              '📌 Zones fixes - Plus de décalage avec redimensionnement',
+              '📌 Fenêtre maximisée - Zones stables',
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
             ),
           ],
