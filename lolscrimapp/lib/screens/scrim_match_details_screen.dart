@@ -12,7 +12,7 @@ import '../models/game_data.dart';
 import '../services/players_provider.dart';
 import '../services/riot_api_service.dart';
 import '../services/scrims_provider.dart';
-import 'screenshot_preview_screen.dart';
+import 'interactive_ocr_preview_screen.dart';
 
 /// Données temporaires pour un joueur en cours de saisie
 class MatchPlayerData {
@@ -1781,12 +1781,17 @@ class _ScrimMatchDetailsScreenState extends State<ScrimMatchDetailsScreen> {
       
       if (!mounted) return;
       
-      // Naviguer vers l'écran de prévisualisation
+      // Naviguer vers l'écran de prévisualisation interactive
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => ScreenshotPreviewScreen(
+          builder: (context) => InteractiveOCRPreviewScreen(
             screenshotFile: imageFile!,
-            onConfirm: _applyScreenshotData,
+            onConfirm: (myTeam, enemyTeam) {
+              print('🎯 Données OCR reçues des zones personnalisées:');
+              print('   Mon équipe: ${myTeam.length} joueurs');
+              print('   Équipe adverse: ${enemyTeam.length} joueurs');
+              _applyScreenshotData(myTeam, enemyTeam);
+            },
           ),
         ),
       );

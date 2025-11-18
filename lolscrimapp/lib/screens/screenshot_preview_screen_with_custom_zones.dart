@@ -1,24 +1,29 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import '../services/screenshot_analyzer.dart';
+import 'package:image/image.dart' as img;
+import '../services/ocr_orchestrator.dart';
 import 'ocr_results_editor_screen.dart';
 
-/// Écran de prévisualisation simple
-class ScreenshotPreviewScreen extends StatefulWidget {
+/// 🎯 Écran de prévisualisation OCR avec zones personnalisées
+/// Identique au ScreenshotPreviewScreen normal mais utilise les zones
+/// personnalisées définies dans l'écran interactif
+class ScreenshotPreviewScreenWithCustomZones extends StatefulWidget {
   final File screenshotFile;
+  final Map<String, Map<String, int>> customZones;
   final Function(List<Map<String, dynamic>> myTeam, List<Map<String, dynamic>> enemyTeam) onConfirm;
   
-  const ScreenshotPreviewScreen({
+  const ScreenshotPreviewScreenWithCustomZones({
     super.key,
     required this.screenshotFile,
+    required this.customZones,
     required this.onConfirm,
   });
 
   @override 
-  State<ScreenshotPreviewScreen> createState() => _ScreenshotPreviewScreenState();
+  State<ScreenshotPreviewScreenWithCustomZones> createState() => _ScreenshotPreviewScreenWithCustomZonesState();
 }
 
-class _ScreenshotPreviewScreenState extends State<ScreenshotPreviewScreen> {
+class _ScreenshotPreviewScreenWithCustomZonesState extends State<ScreenshotPreviewScreenWithCustomZones> {
   Map<String, dynamic>? _analysisResult;
   bool _isAnalyzing = true;
   double _analysisProgress = 0.0;
@@ -29,26 +34,47 @@ class _ScreenshotPreviewScreenState extends State<ScreenshotPreviewScreen> {
   @override
   void initState() {
     super.initState();
-    _analyzeScreenshot();
+    _analyzeScreenshotWithCustomZones();
   }
 
-  Future<void> _analyzeScreenshot() async {
+  /// 🎯 Analyse avec zones personnalisées au lieu de l'auto-détection
+  Future<void> _analyzeScreenshotWithCustomZones() async {
     setState(() {
       _isAnalyzing = true;
       _analysisProgress = 0.0;
-      _analysisMessage = 'Demarrage de l\'analyse...';
+      _analysisMessage = '🎯 Analyse avec vos zones personnalisées...';
     });
     
     try {
-      final result = await ScreenshotAnalyzer.analyzeScreenshot(
-        widget.screenshotFile,
-        onProgress: (progress, message) {
-          setState(() {
-            _analysisProgress = progress;
-            _analysisMessage = message;
-          });
-        },
+      // Lire l'image et vérifier sa taille
+      final imageBytes = await widget.screenshotFile.readAsBytes();
+      
+      // NOUVEAU: Diagnostiquer l'image avant OCR
+      final image = img.decodeImage(imageBytes);
+      if (image != null) {
+        print('🔍 DIAGNOSTIC IMAGE: ${image.width}x${image.height}');
+        print('🎯 ZONES REÇUES: ${widget.customZones.length}');
+        widget.customZones.forEach((key, zone) {
+          print('   $key: x=${zone['x']}, y=${zone['y']}, w=${zone['width']}, h=${zone['height']}');
+        });
+      }
+      
+      setState(() {
+        _analysisProgress = 0.2;
+        _analysisMessage = '🔍 OCR en cours sur zones ciblées...';
+      });
+      
+      // Utiliser l'OCROrchestrator avec les zones personnalisées
+      final result = await OCROrchestrator.analyzeLoLScreenshotWithCustomZones(
+        imageBytes,
+        widget.customZones,
       );
+      
+      setState(() {
+        _analysisProgress = 0.8;
+        _analysisMessage = '📊 Traitement des résultats...';
+      });
+      
       final players = (result['players'] as List<dynamic>?) ?? [];
       
       setState(() {
@@ -57,11 +83,18 @@ class _ScreenshotPreviewScreenState extends State<ScreenshotPreviewScreen> {
         _myTeamData = players.take(5).cast<Map<String, dynamic>>().toList();
         _enemyTeamData = players.skip(5).take(5).cast<Map<String, dynamic>>().toList();
         _isAnalyzing = false;
+        _analysisProgress = 1.0;
+        _analysisMessage = '✅ Analyse terminée !';
       });
+      
+      // Petit délai pour voir le 100%
+      await Future.delayed(const Duration(milliseconds: 500));
+      
     } catch (e) {
       setState(() {
         _analysisResult = {'error': e.toString(), 'players': []};
         _isAnalyzing = false;
+        _analysisMessage = '❌ Erreur d\'analyse';
       });
     }
   }
@@ -94,8 +127,9 @@ class _ScreenshotPreviewScreenState extends State<ScreenshotPreviewScreen> {
             
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('✅ Corrections sauvegardées !'),
+                content: Text('✅ Données mises à jour !'),
                 backgroundColor: Colors.green,
+                duration: Duration(seconds: 2),
               ),
             );
           },
@@ -107,122 +141,146 @@ class _ScreenshotPreviewScreenState extends State<ScreenshotPreviewScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Données extraites'),
-        backgroundColor: const Color(0xFF1E1E2E),
-        foregroundColor: Colors.white,
-      ),
       backgroundColor: const Color(0xFF1E1E2E),
-      body: _isAnalyzing
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(40.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+      appBar: AppBar(
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('🎯 Résultats OCR Zones Personnalisées'),
+            Text(
+              'Analyse terminée avec vos zones ultra-précises',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.deepPurple,
+        foregroundColor: Colors.white,
+        toolbarHeight: 70,
+      ),
+      body: _isAnalyzing ? _buildAnalysisProgress() : _buildResults(),
+    );
+  }
+
+  Widget _buildAnalysisProgress() {
+    return Container(
+      color: const Color(0xFF1E1E2E),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // 🎯 Icône et titre
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.deepPurple.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.deepPurple.withOpacity(0.3)),
+            ),
+            child: Column(
+              children: [
+                const Icon(
+                  Icons.auto_fix_high,
+                  color: Colors.deepPurple,
+                  size: 64,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '🎯 OCR avec Zones Personnalisées',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Analyse ultra-précise en cours...',
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 48),
+          
+          // Barre de progression
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.symmetric(horizontal: 48),
+            child: Column(
+              children: [
+                LinearProgressIndicator(
+                  value: _analysisProgress,
+                  backgroundColor: Colors.grey[700],
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+                  minHeight: 8,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  _analysisMessage,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${(_analysisProgress * 100).toInt()}%',
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 48),
+          
+          // 🎯 Informations sur les zones personnalisées
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 24),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.blue[50],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue[200]!),
+            ),
+            child: Column(
+              children: [
+                Row(
                   children: [
-                    // Icon animé
-                    const SizedBox(
-                      width: 80,
-                      height: 80,
-                      child: CircularProgressIndicator(
-                        color: Colors.purple,
-                        strokeWidth: 6,
-                      ),
-                    ),
-                    const SizedBox(height: 40),
-                    
-                    // Titre
-                    const Text(
-                      'Analyse OCR en cours',
+                    Icon(Icons.info_outline, color: Colors.blue[700]),
+                    const SizedBox(width: 8),
+                    Text(
+                      '🎯 Utilisation de Vos Zones Personnalisées',
                       style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
                         fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 30),
-                    
-                    // Barre de progression
-                    Container(
-                      width: double.infinity,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[800],
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: FractionallySizedBox(
-                        alignment: Alignment.centerLeft,
-                        widthFactor: _analysisProgress,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Colors.purple, Colors.purpleAccent],
-                            ),
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 15),
-                    
-                    // Pourcentage et message
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _analysisMessage,
-                          style: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 14,
-                          ),
-                        ),
-                        Text(
-                          '${(_analysisProgress * 100).toInt()}%',
-                          style: const TextStyle(
-                            color: Colors.purpleAccent,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 30),
-                    
-                    // Info
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.purple.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.purple.withOpacity(0.3),
-                        ),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.info_outline, color: Colors.purpleAccent, size: 20),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'Analyse multi-passes avec Tesseract OCR pour une precision optimale',
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ],
+                        color: Colors.blue[700],
                       ),
                     ),
                   ],
                 ),
-              ),
-            )
-          : _buildContent(),
+                const SizedBox(height: 8),
+                Text(
+                  '• ${widget.customZones.length} zones définies par vos soins\n'
+                  '• Positionnement ultra-précis pour chaque élément\n'
+                  '• OCR ciblé sur vos zones exactes',
+                  style: TextStyle(color: Colors.blue[600]),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildResults() {
     if (_analysisResult?['error'] != null) {
       return Center(
         child: Column(
@@ -275,7 +333,7 @@ class _ScreenshotPreviewScreenState extends State<ScreenshotPreviewScreen> {
               _buildTeamSection('Équipe Adverse', _enemyTeamData, Colors.red),
               const SizedBox(height: 24),
               
-              // 💡 Info OCR
+              // 💡 Info OCR avec zones personnalisées
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -288,10 +346,10 @@ class _ScreenshotPreviewScreenState extends State<ScreenshotPreviewScreen> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.info_outline, color: Colors.blue[700]),
+                        Icon(Icons.auto_fix_high, color: Colors.blue[700]),
                         const SizedBox(width: 8),
                         Text(
-                          '🎯 Résultats de la Détection OCR',
+                          '🎯 Résultats OCR avec Zones Personnalisées',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: Colors.blue[700],
@@ -301,9 +359,9 @@ class _ScreenshotPreviewScreenState extends State<ScreenshotPreviewScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '• L\'OCR a automatiquement détecté ${(_myTeamData.length + _enemyTeamData.length)} joueurs\n'
-                      '• Utilisez "Corriger OCR" pour ajuster les erreurs rapidement\n'
-                      '• Prochainement: Prévisualisation des zones avant OCR !',
+                      '• OCR réalisé avec ${widget.customZones.length} zones personnalisées\n'
+                      '• Positionnement ultra-précis défini par vos soins\n'
+                      '• Utilisez "Corriger OCR" pour ajuster les erreurs rapidement',
                       style: TextStyle(color: Colors.blue[600]),
                     ),
                   ],
@@ -377,23 +435,23 @@ class _ScreenshotPreviewScreenState extends State<ScreenshotPreviewScreen> {
   }
 
   Widget _buildPlayerCard(Map<String, dynamic> player) {
-    final name = player['name'] as String? ?? 'Unknown';
-    final kills = player['kills'] as int? ?? 0;
-    final deaths = player['deaths'] as int? ?? 0;
-    final assists = player['assists'] as int? ?? 0;
-    final cs = player['cs'] as int? ?? 0;
-    final gold = player['gold'] as int? ?? 0;
-    final recognized = player['recognized'] as bool? ?? false;
-    final confidence = (player['confidence'] as num?)?.toDouble() ?? 0.0;
+    final name = player['name'] ?? 'N/A';
+    final kills = player['kills'] ?? 0;
+    final deaths = player['deaths'] ?? 0;
+    final assists = player['assists'] ?? 0;
+    final cs = player['cs'] ?? 0;
+    final gold = player['gold'] ?? 0;
+    final confidence = (player['confidence'] ?? 0.0) as double;
+    final recognized = confidence > 0.7;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2A3A),
+        color: Colors.grey[900],
         borderRadius: BorderRadius.circular(8),
         border: recognized
-            ? Border.all(color: Colors.green, width: 2)
+            ? Border.all(color: Colors.green, width: 1)
             : Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
       ),
       child: Row(
