@@ -962,7 +962,33 @@ class OCROrchestrator {
 
     final w = image.width;
     final h = image.height;
-    print('\n🎮 === ANALYSE OCR AVEC ZONES PERSONNALISÉES ${w}x${h} ===');
+    print('\n🎮 === ANALYSE OCR AVEC ZONES PERSONNALISÉES ===');
+    print('📸 IMAGE OCR: ${w}x${h}');
+    print('🎯 ZONES REÇUES: ${customZones.length}');
+    print('');
+    
+    // Vérifier que les zones sont valides pour cette image
+    bool hasInvalidZones = false;
+    customZones.forEach((key, zone) {
+      final x = zone['x'] ?? 0;
+      final y = zone['y'] ?? 0;
+      final zoneW = zone['width'] ?? 0;
+      final zoneH = zone['height'] ?? 0;
+      
+      if (x < 0 || y < 0 || x + zoneW > w || y + zoneH > h) {
+        print('⚠️  ZONE INVALIDE: $key → x=$x, y=$y, w=$zoneW, h=$zoneH (dépasse image ${w}x${h})');
+        hasInvalidZones = true;
+      } else {
+        print('✅ $key: x=$x, y=$y, w=$zoneW, h=$zoneH');
+      }
+    });
+    
+    if (hasInvalidZones) {
+      print('');
+      print('❌ ERREUR: Certaines zones dépassent les limites de l\'image !');
+      print('💡 Les zones relatives ont-elles été converties correctement?');
+      print('');
+    }
 
     onProgress?.call(0.1, 'Initialisation...');
     
@@ -975,7 +1001,6 @@ class OCROrchestrator {
     
     try {
       onProgress?.call(0.05, 'Utilisation des zones personnalisées...');
-      print('Zones personnalisées: ${customZones.length}');
       
       int processedPlayers = 0;
       

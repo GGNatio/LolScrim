@@ -507,10 +507,13 @@ class _InteractiveOCRPreviewScreenState extends State<InteractiveOCRPreviewScree
     final realImage = img.decodeImage(imageBytes);
     final imageSize = realImage != null ? Size(realImage.width.toDouble(), realImage.height.toDouble()) : Size(1920, 1080);
     
+    print('\n🔍 === CONVERSION ZONES RELATIVES → ABSOLUES ===');
     print('📸 TAILLE RÉELLE DE L\'IMAGE: ${imageSize.width}x${imageSize.height}');
-    print('🎯 Interface calibrée pour: 1600x900 (mais zones relatives)');
+    print('🎯 Zones définies comme relatives (0.0-1.0)');
+    print('💡 Conversion: relX * imageWidth = absX');
     
     for (final zone in _zones) {
+      final relRect = zone.rect;
       final absoluteRect = zone.toAbsoluteRect(imageSize);
       
       customZones[zone.id] = {
@@ -520,10 +523,13 @@ class _InteractiveOCRPreviewScreenState extends State<InteractiveOCRPreviewScree
         'height': absoluteRect.height.round(),
       };
       
-      print('  ${zone.id} (${zone.type}): rel=${zone.rect} → abs=x:${absoluteRect.left.round()}, y:${absoluteRect.top.round()}, w:${absoluteRect.width.round()}, h:${absoluteRect.height.round()}');
+      print('  ${zone.id} (${zone.type}):');
+      print('    Rel: L=${relRect.left.toStringAsFixed(3)}, T=${relRect.top.toStringAsFixed(3)}, W=${relRect.width.toStringAsFixed(3)}, H=${relRect.height.toStringAsFixed(3)}');
+      print('    Abs: x=${absoluteRect.left.round()}, y=${absoluteRect.top.round()}, w=${absoluteRect.width.round()}, h=${absoluteRect.height.round()}');
     }
     
-    print('🎯 TOTAL: ${customZones.length} zones converties pour image ${imageSize.width}x${imageSize.height}');
+    print('🎯 TOTAL: ${customZones.length} zones converties pour OCR sur image ${imageSize.width.round()}x${imageSize.height.round()}');
+    print('==============================================\n');
     
     return customZones;
   }

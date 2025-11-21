@@ -12,6 +12,9 @@ import 'players_screen.dart';
 import 'scrims_screen.dart';
 import 'search_screen.dart';
 import 'create_scrim_screen.dart';
+import 'settings_screen.dart';
+import 'debug_connection_screen.dart';
+import 'create_scrim_modal.dart';
 
 
 /// Écran principal avec navigation par onglets
@@ -83,6 +86,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             tooltip: 'Plus d\'options',
             onSelected: (value) {
               switch (value) {
+                case 'settings':
+                  _openSettings();
+                  break;
+                case 'debug_connect':
+                  _openDebugConnection();
+                  break;
                 case 'debug':
                   _debugStorage();
                   break;
@@ -101,6 +110,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               }
             },
             itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'settings',
+                child: Row(children: [
+                  Icon(Icons.settings), 
+                  SizedBox(width: 8), 
+                  Text('Paramètres')
+                ]),
+              ),
+              const PopupMenuItem(
+                value: 'debug_connect',
+                child: Row(children: [
+                  Icon(Icons.cable), 
+                  SizedBox(width: 8), 
+                  Text('Debug Connect')
+                ]),
+              ),
               const PopupMenuItem(
                 value: 'debug',
                 child: Row(children: [
@@ -287,14 +312,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
     
     if (teams.length == 1) {
-      // Si une seule équipe, aller directement à la création
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => CreateScrimScreen(team: teams.first),
-        ),
+      // Si une seule équipe, ouvrir le modal de choix
+      showDialog(
+        context: context,
+        builder: (context) => CreateScrimModal(team: teams.first),
       );
     } else {
-      // Sinon, montrer un dialogue de sélection
+      // Sinon, montrer un dialogue de sélection d'équipe
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
@@ -309,10 +333,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               subtitle: Text('${team.playerIds.length} joueurs'),
               onTap: () {
                 Navigator.of(context).pop();
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => CreateScrimScreen(team: team),
-                  ),
+                showDialog(
+                  context: context,
+                  builder: (context) => CreateScrimModal(team: team),
                 );
               },
             )).toList(),
@@ -412,5 +435,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  /// Ouvre l'écran des paramètres
+  void _openSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const SettingsScreen(),
+      ),
+    );
+  }
 
+  /// Ouvre l'écran de debug de la connexion LCU
+  void _openDebugConnection() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const DebugConnectionScreen(),
+      ),
+    );
+  }
 }

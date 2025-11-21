@@ -7,6 +7,7 @@ import 'services/players_provider.dart';
 import 'services/teams_provider.dart';
 import 'services/scrims_provider.dart';
 import 'services/storage_service.dart';
+import 'services/lol_connection_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +28,7 @@ class LolScrimApp extends StatelessWidget {
         ChangeNotifierProvider(create: (context) => PlayersProvider()),
         ChangeNotifierProvider(create: (context) => TeamsProvider()),
         ChangeNotifierProvider(create: (context) => ScrimsProvider()),
+        ChangeNotifierProvider(create: (context) => LolConnectionService()),
       ],
       child: MaterialApp(
         title: 'LoL Scrim Manager',
